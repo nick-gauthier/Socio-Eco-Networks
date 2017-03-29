@@ -1,0 +1,54 @@
+---
+title: "R Notebook"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+```{r echo=F, message=F, warning=F}
+library(phaseR)
+```
+
+
+Setup the model
+
+```{r}
+netMod <- function(t, y, parameters){
+    r <- parameters[1]
+    K <- parameters[2]
+    H <- parameters[3]
+    beta <- parameters[4]
+    E <- parameters[5]
+    M <- parameters[6]
+    alpha <- parameters[7]
+    
+    dy <- numeric(2)
+    dy[1] <- r * y[1] * (1 - y[1] / K) - H * y[1] * y[2]^beta
+    dy[2] <- H / E * y[1] * y[2]^beta - M / E * y[2]^alpha
+    list(dy)
+} 
+```
+
+
+```{r}
+y0 <- matrix(c(1, 1, .1, .1, 1.1, 1, .1, .9),
+             ncol = 2, nrow = 4,
+             byrow = TRUE)  
+```
+
+Plot the dynamics of this system in phase space. First, define a function to plot the flow field, nullclines, and some trajectories for a given model and parameter set.
+```{r}
+phasePlot <- function(mod, params, xmax = 1, ymax = 1){
+  x.lim <- c(0, xmax)
+  y.lim <- c(0, ymax)
+  
+  flw <- flowField(mod, x.lim = x.lim, y.lim = y.lim, parameters = params, xlab = 'Grass', ylab = 'Sheep', add = F)
+  nc <- nullclines(mod, x.lim = x.lim, y.lim = y.lim, parameters = params)
+  trj <- trajectory(mod, y0 = y0, t.end = 100, colour = rep('black', nrow(y0)), parameters = params)
+}
+```
+
+```{r}
+phasePlot(netMod, c(.1, 1.5, 1e-6, 1, 1e-4, 4e-7, 1), xmax = 2, ymax = 2)
+```
+
