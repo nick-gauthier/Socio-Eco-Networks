@@ -1,0 +1,223 @@
+---
+title: The evolution of routes and paths in a dynamic environment
+author:
+  - name: Nicolas Gauthier
+    email: Nicolas.Gauthier@asu.edu
+    affiliation: Arizona State University
+    footnote: Corresponding Author
+address:
+  - code: Arizona State University
+    address: School of Human Evolution and Social Change, S. Caddy Mall, Tempe, AZ, Zip
+abstract:
+
+journal: "Journal of Archaeological Science"
+date: "`r Sys.Date()`"
+bibliography: mybibfile.bib
+output: rticles::elsevier_article
+---
+
+
+```{r echo = FALSE, eval = FALSE}
+# Install necessary packages if not already available (this chunk doesn't run by default).
+install.packages('tidyverse')
+install.packages('raster')
+install.packages('NLMR')
+install.packages('tidygraph')
+install.packages('gifski')
+install.packages('png')
+
+# install the dev versions of these packages from github using devtools
+install.packages('devtools')
+devtools::install_github('thomasp85/ggraph')
+devtools::install_github('thomasp85/gganimate')
+devtools::install_github('thomasp85/patchwork')
+```
+
+```{r, echo = FALSE, message = FALSE}
+library(raster)
+library(tidyverse)
+library(tidygraph)
+library(ggraph)
+library(NLMR)
+library(gganimate)
+library(patchwork)
+```
+
+
+# Introduction
+
+Archaeology is embracing the form of constrained spatial interaction modeling developed by Wilson. These Boltzmann-Lotka-Volterra (BLV) style models use maximum entropy spatial interaction models to allocate flows between a spatially structured metapopulation, and Lotka-Volterra style consumer-resource equations to govern the growth of the populations. These equations are able to capture the dynamic feedbacks between settlements and the networks connecting them. Recent work in archaeology has expanded these models to allow the networks to further evolve, as routes that are more often used to connect important sites become themselves important, which in turn shapes the growth of settlements close to those routes. Past work has shown how stable routes and sets of routes can develop in mountainous topography, where physical constraints on movement are able to constrain the possible routes between settlements. 
+  
+Here, I extend this approach to examine how routes and paths -- the spatial networks that connect settlements -- evolve in response to patterns of environmental variability. Rather than leaving the carrying capacity of our population of settlements to remain fixed, we allow it to vary over space and in time. We examine how different patterns of spatio-temporal change lead to different settlement patterns and spatial network. We use a simple computatational modeling approach to facilitate a broad range of exploration, while maintaining interpretive clarity. We expect that different patterns, such as fixed oscillations, to lead to different stable patterns of spatial networks, whose dynamical behavior feeds back to influence settlement dynamics. In this way we seek to model the potential for "inertia" in settlement patterns, complicating the relationship between environmental forcing and social dynamics. Finally we allow for bidirectional feedbacks between human populations and the environment, exploring the potential for nonlinear social-ecological dynamics.
+
+We distinguish here between "routes" and "paths". The former is a social construct, the latter are physical.
+
+
+# Methods
+
+Parameters for the model.
+
+```{r}
+n <- 100 # number of settlements
+pop_start <- 150 # starting population per settlement
+alpha <- 1.05 # superlinear returns to population size
+beta <- 0.15 # distance decay parameter
+```
+
+We make a population of settlements. They all start with a population of `pop_start`, and are distributed randomly over a 100 x 100 space. 
+
+```{r}
+set.seed(3)
+net <- tbl_graph(edges = expand.grid(from = 1:n, to = 1:n),
+                 nodes = tibble(population = pop_start,
+                                attractiveness = 1,
+                                x = runif(100, max = 100),
+                                y = runif(100, max = 100))) %E>%
+  filter(!edge_is_loop()) %>%
+  mutate(distance = sqrt((.N()$x[from] - .N()$x[to]) ^ 2 + 
+                           (.N()$y[from] - .N()$y[to]) ^ 2)) %>%
+  activate(nodes)
+
+locations <- net %N>%
+  select(x:y) %>%
+  as_tibble
+```
+
+```{r}
+set.seed(100) # set seed for reproducability
+pts <- tibble(x = sample(1:100, n, replace = TRUE),
+              y = sample(1:100, n, replace = TRUE))
+```
+
+Then figure out the euclidean distances between the settlements and pull it all together into a `tbl_graph` object.
+
+```{r}
+settlements <- pts %>%
+  dist(diag = TRUE, upper = TRUE) %>%
+  as.matrix %>%
+  as_tbl_graph %>%
+  mutate(population = pop_start,
+         attractiveness = population,
+         x = pts$x,
+         y = pts$y) %E>%
+  rename(distance = weight) %>%
+  filter(!edge_is_loop())
+```
+
+```{r echo = FALSE}
+net %E>%
+  group_by(from) %>% 
+  top_n(-3, distance) %>% # retain the top 3 shortest edges
+ggraph(node.positions = pts) +
+  geom_node_point(aes(size = population)) +
+  geom_edge_fan(aes(alpha = -1 *..index..), width = 1) +
+  #scale_y_continuous(limits = c(1,100)) +
+  #scale_x_continuous(limits = c(1,100)) +
+  scale_size_area() +
+  coord_equal() +
+  ggtitle('Initial population distribution', 'k = 3 nearest neighbor network') +
+  theme(legend.position="none") +
+  theme_void()
+```
+
+
+## Landscape Model
+
+We simulate different spatial patterns of environmental variability using the `NLMR` package.
+
+```{r}
+null <- matrix(0, nrow = 100, ncol = 100) %>% 
+  raster(xmx = 100, ymx = 100)
+
+uniform <- matrix(1, nrow = 100, ncol = 100) %>% 
+  raster(xmx = 100, ymx = 100)
+
+random <- nlm_random(100, 100)
+
+distance_gradient <- 1- nlm_distancegradient(100, 100, origin = c(0, 10, 0, 10))
+
+distance_gradient_center <- 1- nlm_distancegradient(100, 100, origin = c(49, 51, 49, 51))
+
+oscillation <- distance_gradient * -1 + 1 - nlm_distancegradient(100, 100, origin = c(90, 100, 90, 100))
+
+edge_gradient <- nlm_edgegradient(100, 100, direction = 0)
+
+planar_gradient <- nlm_planargradient(100, 100, direction = 0)
+
+grf_001 <- nlm_gaussianfield(100, 100, autocorr_range = 1, user_seed = 1000)
+grf_010 <- nlm_gaussianfield(100, 100, autocorr_range = 10, user_seed = 1000)
+grf_100 <- nlm_gaussianfield(100, 100, autocorr_range = 100, user_seed = 1000)
+
+
+env <- brick(null, uniform, random, distance_gradient_center, edge_gradient, oscillation, grf_001, grf_010, grf_100)
+```
+
+```{r echo = FALSE}
+env %>%
+  as.data.frame(xy = TRUE, long = TRUE) %>%
+  ggplot(aes(x, y)) +
+  geom_raster(aes(fill = value)) +
+  coord_equal() +
+  facet_wrap(~layer) +
+  theme_void() +
+  scale_fill_viridis_c()
+```
+
+
+## Spatial Interaction Model
+
+```{r interact}
+interact <- function(net){
+  net %E>%
+    mutate(interaction_strength = .N()$attractiveness[to] ^ alpha * exp(-beta * distance))  %N>%
+    mutate(outflow = population / centrality_degree(weights = interaction_strength, mode = 'out', loops = FALSE)) %E>%
+    mutate(flow = .N()$outflow[from] * interaction_strength) %N>%
+    mutate(inflow = centrality_degree(weights = flow, mode = 'in', loops = F),
+           attractiveness = attractiveness + .01 * (inflow  - attractiveness),
+           population = n * pop_start * attractiveness / sum(attractiveness))
+}
+```
+
+```{r}
+nystuen_dacey <- function(net){
+  net %E>%
+  group_by(from) %>%
+  filter(flow == max(flow), .N()$population[from] < .N()$population[to]) %N>%
+  mutate(terminal = node_is_sink()) %>%
+  ungroup
+}
+```
+
+# Results
+
+```{r message = FALSE}
+sim_length <- 100 # number of time steps
+
+sim <- accumulate(1:sim_length, ~interact(.x), .init = net) %>%
+  .[2:sim_length] %>% # remove the initial state
+  map(nystuen_dacey) %>%
+  map(as_tibble) %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time = as.numeric(time))
+```
+
+
+```{r, echo = FALSE}
+ggplot(sim, aes(x, y, size = population)) +
+  geom_point(aes(color = terminal)) +
+  coord_equal() +
+  theme_void() +
+  labs(title = 'Year: {closest_state}') +
+  transition_states(time)
+```
+
+Here are two sample references: @Feynman1963118 [@Dirac1953888].
+
+
+# Discussion
+
+
+# Conclusion
+
+
+# References {#references .unnumbered}
