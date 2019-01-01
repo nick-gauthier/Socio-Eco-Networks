@@ -83,6 +83,27 @@ locations <- net %N>%
   as_tibble
 ```
 
+
+```{r}
+net <- create_lattice(c(4, 4)) %N>%
+  mutate(population = pop_start,
+         attractiveness = 1,
+         x = rep(c(20, 40, 60, 80), 4),
+         y = rep(c(20, 40, 60, 80), each = 4)) %E>%
+  mutate(distance = node_distance_to())
+
+# need to figure out how to get full pairwise distance matrix and and to do that
+```
+
+```{r}
+ggraph(net, x = x, y = y) + 
+  geom_node_point(aes(size = population)) +
+  geom_edge_link() +
+  coord_equal() +
+  theme_void()
+```
+
+
 ```{r}
 set.seed(100) # set seed for reproducability
 pts <- tibble(x = sample(1:100, n, replace = TRUE),
@@ -186,12 +207,14 @@ nystuen_dacey <- function(net){
   mutate(terminal = node_is_sink()) %>%
   ungroup
 }
+
+# try using node_is_ functions to calculate instead
 ```
 
 # Results
 
 ```{r message = FALSE}
-sim_length <- 100 # number of time steps
+sim_length <- 20 # number of time steps
 
 sim <- accumulate(1:sim_length, ~interact(.x), .init = net) %>%
   .[2:sim_length] %>% # remove the initial state
