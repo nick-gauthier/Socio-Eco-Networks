@@ -76,80 +76,142 @@ beta <- 0.15 # distance decay parameter
 We make a population of settlements. They all start with a population of `pop_start`, and are distributed randomly over a 100 x 100 space. 
 
 ```{r}
-set.seed(3)
-net <- tbl_graph(edges = expand.grid(from = 1:n, to = 1:n),
+env <- matrix(1, nrow = 100, ncol = 100) %>% 
+  raster(xmx = 100, ymx = 100)
+
+euc_dist <- function(x1, x2, y1, y2){
+  sqrt((x1 - x2) ^ 2 + (y1 - y2) ^2)
+}
+
+trans <- transition(env, transitionFunction = mean, directions = 8) %>%
+  geoCorrection(type = 'r')
+
+set.seed(1000)
+settlements <- tbl_graph(edges = expand.grid(from = 1:n, to = 1:n),
                  nodes = tibble(population = pop_start,
                                 attractiveness = 1,
-                                x = runif(100, max = 100),
-                                y = runif(100, max = 100))) %E>%
-  filter(!edge_is_loop()) %>%
-  mutate(distance = sqrt((.N()$x[from] - .N()$x[to]) ^ 2 + 
-                           (.N()$y[from] - .N()$y[to]) ^ 2)) %>%
-  activate(nodes)
+                                x = sample(1:100, n, replace = TRUE),
+                                y = sample(1:100, n, replace = TRUE))) %E>%
+  mutate(euclidean = euc_dist(.N()$x[from], .N()$x[to], 
+                             .N()$y[from], .N()$y[to])) %>%
+  filter(!edge_is_loop())
 
-locations <- net %N>%
+sites <- settlements %N>%
+  as_tibble() %>%
   select(x:y) %>%
-  as_tibble
+  as.matrix
+
+accCost(trans, sites) %>% plot
+
+routes <- commuteDistance(trans, sites) %>%
+  as.matrix %>%
+  as_tbl_graph %E>%
+  as_tibble %>%
+  left_join(settlements, .) 
+
+
+routes %>%
+  as_tibble() %>%
+  ggplot(aes(euclidean, weight)) + geom_point()
+
+passage(trans, sites[2,], sites[1,], theta=5) %>% plot
+
+plan(multicore, workers = 3)
+
+paths <- routes %E>%
+  as_tibble %>%
+  filter(from > to) %>%
+  mutate(passage = future_map2(from, to, ~passage(trans, sites[.x, ], sites[.y,], theta = 15)))
+
+t1 <- paths %>% pull(passage) %>% brick %>% sum
+plot(t1 / 300)
+
+1:20 %>% accumulate(~.*(log(2) + 1), .init = t1) %>% .[[20]] %>% plot
+
+feedback <- function(x) 
+
+paths <- settlements %E>%
+  group_by(from) %>% 
+  top_n(-6, distance) %>%
+  ungroup %N>%
+  igraph::as.undirected(mode = 'collapse', edge.attr.comb = 'first') %>%
+  as_tbl_graph
 ```
 
 
 ```{r}
-net <- create_lattice(c(4, 4)) %N>%
+#paths <- create_lattice(c(4, 4)) %N>%
+#  mutate(population = pop_start,
+#         attractiveness = 1,
+#         x = rep(c(20, 40, 60, 80), 4),
+#         y = rep(c(20, 40, 60, 80), each = 4))
+
+paths <- create_complete(16) %N>%
   mutate(population = pop_start,
          attractiveness = 1,
          x = rep(c(20, 40, 60, 80), 4),
          y = rep(c(20, 40, 60, 80), each = 4)) %E>%
-  mutate(distance = node_distance_to())
+    mutate(distance = sqrt((.N()$x[from] - .N()$x[to]) ^ 2 + 
+                           (.N()$y[from] - .N()$y[to]) ^ 2)) %>%
+  filter(distance < 30) 
 
+routes <- paths %E>%
+  rename(weight = distance) %>%
+  igraph::distances() %>%
+  as_tbl_graph(directed = TRUE)  %>%
+    mutate(population = pop_start,
+         attractiveness = 1,
+         x = rep(c(20, 40, 60, 80), 4),
+         y = rep(c(20, 40, 60, 80), each = 4)) %E>%
+  rename(distance = weight)
+
+paths_dat <- paths %E>%
+  as_tibble
+
+test <- routes %E>%
+  mutate(short = map2(from, to, ~k_shortest_paths(paths_dat, .x, .y, k = 1, verbose = FALSE)))
+
+test %>% as_tibble %>% .[[1,3]]
 # need to figure out how to get full pairwise distance matrix and and to do that
 ```
 
+
+
+
 ```{r}
-ggraph(net, x = x, y = y) + 
+ggraph(paths, x = x, y = y) + 
   geom_node_point(aes(size = population)) +
-  geom_edge_link() +
+  geom_edge_link(alpha = .5) +
+  coord_equal() +
+  theme_void()
+
+ggraph(routes, x = x, y = y) + 
+  geom_edge_link(alpha = .5, aes(color = distance)) +
+  geom_node_point(aes(size = centrality_degree(weights = -1*distance))) +
   coord_equal() +
   theme_void()
 ```
 
 
-```{r}
-set.seed(100) # set seed for reproducability
-pts <- tibble(x = sample(1:100, n, replace = TRUE),
-              y = sample(1:100, n, replace = TRUE))
-```
-
-Then figure out the euclidean distances between the settlements and pull it all together into a `tbl_graph` object.
-
-```{r}
-settlements <- pts %>%
-  dist(diag = TRUE, upper = TRUE) %>%
-  as.matrix %>%
-  as_tbl_graph %>%
-  mutate(population = pop_start,
-         attractiveness = population,
-         x = pts$x,
-         y = pts$y) %E>%
-  rename(distance = weight) %>%
-  filter(!edge_is_loop())
-```
-
 ```{r echo = FALSE}
-net %E>%
+settlements %E>%
   group_by(from) %>% 
-  top_n(-3, distance) %>% # retain the top 3 shortest edges
-ggraph(node.positions = pts) +
+  top_n(-6, distance) %>% # retain the top 3 shortest edges
+ggraph(x = x, y = y) +
   geom_node_point(aes(size = population)) +
-  geom_edge_fan(aes(alpha = -1 *..index..), width = 1) +
+  geom_edge_link(alpha = .5) +
+  #geom_edge_fan(aes(alpha = -1 *..index..), width = 1) +
   #scale_y_continuous(limits = c(1,100)) +
   #scale_x_continuous(limits = c(1,100)) +
   scale_size_area() +
   coord_equal() +
-  ggtitle('Initial population distribution', 'k = 3 nearest neighbor network') +
+  ggtitle('Initial population distribution', 'k = 4 nearest neighbor network') +
   theme(legend.position="none") +
   theme_void()
 ```
 
+
+Maybe have the routes potentially get twice as fast, equivalent from max speed moving from 3km/h to 6km/h from off path to on
 
 ## Landscape Model
 
@@ -223,11 +285,11 @@ nystuen_dacey <- function(net){
 # Results
 
 ```{r message = FALSE}
-sim_length <- 20 # number of time steps
+sim_length <- 50 # number of time steps
 
-sim <- accumulate(1:sim_length, ~interact(.x), .init = net) %>%
+sim <- accumulate(1:sim_length, ~interact(.x), .init = routes) %>%
   .[2:sim_length] %>% # remove the initial state
-  map(nystuen_dacey) %>%
+  #map(nystuen_dacey) %>%
   map(as_tibble) %>%
   bind_rows(.id = 'time') %>%
   mutate(time = as.numeric(time))
@@ -236,11 +298,16 @@ sim <- accumulate(1:sim_length, ~interact(.x), .init = net) %>%
 
 ```{r, echo = FALSE}
 ggplot(sim, aes(x, y, size = population)) +
-  geom_point(aes(color = terminal)) +
+  geom_point()+#aes(color = terminal)) +
   coord_equal() +
   theme_void() +
   labs(title = 'Year: {closest_state}') +
   transition_states(time)
+```
+
+```{r}
+sim %>%
+  filter(time == 49)
 ```
 
 Here are two sample references: @Feynman1963118 [@Dirac1953888].
