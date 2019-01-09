@@ -18,22 +18,18 @@ output: rticles::elsevier_article
 
 
 ```{r echo = FALSE, eval = FALSE}
-# Install necessary packages if not already available (this chunk doesn't run by default).
-install.packages('tidyverse')
-install.packages('raster')
-install.packages('NLMR')
-install.packages('tidygraph')
-install.packages('gifski')
-install.packages('png')
+# Install necessary packages if not already available (not run by default)
+install.packages(c('tidyverse', 'raster', 'NLMR', 'tidygraph', 'gifski', 'png', 'gdistance', 'furrr'))
 
 # install the dev versions of these packages from github using devtools
 install.packages('devtools')
 devtools::install_github('thomasp85/ggraph')
 devtools::install_github('thomasp85/gganimate')
 devtools::install_github('thomasp85/patchwork')
+devtools::install_github('ecohealthalliance/yenpathy')
 ```
 
-```{r, echo = FALSE, message = FALSE}
+```{r, echo = FALSE}
 library(raster)
 library(tidyverse)
 library(tidygraph)
@@ -41,10 +37,16 @@ library(ggraph)
 library(NLMR)
 library(gganimate)
 library(patchwork)
+library(yenpathy)
+library(gdistance)
+library(furrr)
 ```
 
 
 # Introduction
+
+Paths are physical as well as social infrastructure. Hence the dynamics.
+
 
 Archaeology is embracing the form of constrained spatial interaction modeling developed by Wilson. These Boltzmann-Lotka-Volterra (BLV) style models use maximum entropy spatial interaction models to allocate flows between a spatially structured metapopulation, and Lotka-Volterra style consumer-resource equations to govern the growth of the populations. These equations are able to capture the dynamic feedbacks between settlements and the networks connecting them. Recent work in archaeology has expanded these models to allow the networks to further evolve, as routes that are more often used to connect important sites become themselves important, which in turn shapes the growth of settlements close to those routes. Past work has shown how stable routes and sets of routes can develop in mountainous topography, where physical constraints on movement are able to constrain the possible routes between settlements. 
   
@@ -52,13 +54,20 @@ Here, I extend this approach to examine how routes and paths -- the spatial netw
 
 We distinguish here between "routes" and "paths". The former is a social construct, the latter are physical.
 
+These networks act as social infrastructure, channeling the flow of energy between spatially structured populations in much the same way as food webs channel energy in ecosystems \parencite{Crabtree2017ReconstructingStates;Crabtree2015}.
+
+  Sharing and exchange are critical for maintaining population in response to interannual climate variability, although this short term stability can come at the cost of long term environmental degradation \parencite{Janssen2010}. More restricted sharing rules can be effective \parencite{Hegmon1996}, but can also be sensitive to the asymmetric accrual of debts if one party's food supply is more volatile than anothers' \parencite{Crabtree2015}.
+ 
+Social infrastructure interacts directly with physical infrastructure because social networks must map onto spatial networks. Metabolic costs, such as the energy expended producing and transporting food over space where transportation infrastructure is sparse, provide constraints on energy flows in exchange systems \parencite{Drennan1984}. In any particular case, the balance between these costs and the metabolic benefits of social interaction influences whether resources are moved in bulk to populations in need, or whether those populations move themselves to the available resources. The topology of spatial networks also constrains who can interact with whom, introducing bottlenecks and other structural flow constraints \parencite{Barthelemy2011SpatialNetworks}. Improvements to transportation infrastructure, such as roads and trails, decrease the effective distance between different settlements; failure to maintain these transportation networks increases the effective distance \parencite{McCall1985TheAfrica}.
+
+Regional scale patterns of spatial interaction arise from the decisions of heterogeneous agents interacting with imperfect and incomplete information. They make decisions based on the perceived costs and benefits of interaction, as far as they are able to distinguish them. It is crucial to estimate distribution of each person's subjective predictions about the costs and benefits of social interaction, conditional on the information available to them about each potential destination.
 
 # Methods
 
 Parameters for the model.
 
 ```{r}
-n <- 100 # number of settlements
+n <- 25 # number of settlements
 pop_start <- 150 # starting population per settlement
 alpha <- 1.05 # superlinear returns to population size
 beta <- 0.15 # distance decay parameter
