@@ -227,9 +227,11 @@ interact <- function(net){
 nystuen_dacey <- function(net){
   net %E>%
   group_by(from) %>%
-  filter(flow == max(flow), .N()$population[from] < .N()$population[to]) %N>%
+  filter(flow == max(flow)) %>%
+  ungroup %>%
+  filter(.N()$population[from] < .N()$population[to]) %N>%
   mutate(terminal = node_is_sink()) %>%
-  ungroup
+  convert(to_undirected) 
 }
 
 # try using node_is_ functions to calculate instead
@@ -242,20 +244,30 @@ sim_length <- 50 # number of time steps
 
 sim <- accumulate(1:sim_length, ~interact(.x), .init = routes) %>%
   .[2:sim_length] %>% # remove the initial state
-  #map(nystuen_dacey) %>%
-  map(as_tibble) %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time = as.numeric(time))
+  map(nystuen_dacey)
 ```
 
 
 ```{r, echo = FALSE}
-ggplot(sim, aes(x, y, size = population)) +
+sim %>%
+  map(as_tibble) %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time = as.numeric(time)) %>%
+ggplot(aes(x, y, size = population)) +
   geom_point()+#aes(color = terminal)) +
   coord_equal() +
   theme_void() +
   labs(title = 'Year: {closest_state}') +
   transition_states(time)
+```
+
+```{r}
+sim[[49]] %>%
+ggraph(x = x, y = y) + 
+  geom_edge_fan(alpha = .2) +
+    geom_node_point(aes(size = population, color = terminal)) +
+  coord_equal() +
+  theme_void()
 ```
 
 Here are two sample references: @Feynman1963118 [@Dirac1953888].
