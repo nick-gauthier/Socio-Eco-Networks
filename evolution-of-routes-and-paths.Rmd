@@ -34,6 +34,7 @@ library(raster)
 library(tidyverse)
 library(tidygraph)
 library(ggraph)
+library(sf)
 library(NLMR)
 library(gganimate)
 library(patchwork)
@@ -91,7 +92,6 @@ The population of a settlement is free to move between other settlements.
 Parameters for the model.
 
 ```{r}
-n <- 25 # number of settlements
 pop_start <- 200 # starting population per settlement
 alpha <- 1.05 # superlinear returns to population size
 beta <- 0.15 # distance decay parameter
@@ -101,13 +101,15 @@ beta <- 0.15 # distance decay parameter
 We make a population of settlements. They all start with a population of `pop_start`, and are distributed randomly over a 100 x 100 space. 
 
 ```{r}
-hex <- c(50, -87, -50, -87, -100, 0, -50, 87, 50, 87, 100, 0, 50, -87) %>%
+hex <- c(155, 13, 55, 13, 5, 100, 55, 187, 155, 187, 205, 100, 155, 13) %>%
   matrix(nrow = 7, byrow = 2) %>%
   list %>%
   st_polygon %>% 
   st_make_grid(cellsize = 10, square = FALSE) %>%
   st_sf
 
+n <- nrow(hex)
+st_area(hex) %>% sum
 pts <- hex %>%
   st_centroid %>%
   st_coordinates
@@ -126,10 +128,11 @@ paths <- hex %>%
                y = pts[,2],
                xy = st_centroid(st_geometry(hex))) %E>%
     mutate(distance = st_distance(.N()$xy[from], .N()$xy[to], by_element = TRUE),
-           weight = distance) %>%
+           weight = distance,
+           traffic = 0) %>%
   filter(!edge_is_loop()) # or implement phi parameter instead
-
-routes <- paths %E>%
+  
+routes <- paths %>%
   igraph::distances() %>%
   as_tbl_graph(directed = TRUE)  %>%
     mutate(population = pop_start,
@@ -138,31 +141,52 @@ routes <- paths %E>%
                y = pts[,2],
                xy = st_centroid(st_geometry(hex)))%E>%
   rename(distance = weight)
+
+paths <- paths %E>%
+  filter(from < to) %>%
+  convert(to_undirected)
 ```
 
 ```{r}
 ggraph(paths, x = x, y = y) + 
   geom_node_point() +
-  geom_edge_link(alpha = .2) +
+  geom_edge_link(alpha = .3) +
   coord_equal() +
   theme_void()
 ```
 
 
 we can find the shortest paths this way
+
 ```{r}
-paths_dat <- paths %E>%
-  as_tibble
-
+plan(multisession)
 test <- routes %E>%
-  mutate(short = map2(from, to, ~k_shortest_paths(paths_dat, .x, .y, k = 1, verbose = FALSE)))
+  as_tibble %>%
+  mutate(test = future_map2(from, to, ~as.numeric(shortest_paths(paths, .x, .y, output = 'epath')$epath[[1]]), .progress = TRUE))
 
-test %>% as_tibble %>% .[[1,3]]
-# need to figure out how to get full pairwise distance matrix and and to do that
+test2 <- sim %>%
+  map(activate, 'edges') %>%
+  map(as_tibble) %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time = as.numeric(time)) %>%
+ # as_tibble %>%
+  select(time, from, to, flow) %>%
+  left_join(test, .) %>%
+  select(from, test, time, flow) %>%
+  group_by(time, from) %>%
+  nest %>%
+  mutate(data = future_map(data, ~unnest(., test))) %>%
+  select(data) %>%
+  unnest(cols = data) %>%
+  group_by(test) %>%
+  summarise(traffic = sum(flow))
+
+paths %>%
+  select(-traffic) %>%
+  left_join(test2, by = c('.tidygraph_edge_index' = 'test')) %>%
+  arrange(traffic) %>%
+  ggraph() + geom_edge_link(aes(color = log(traffic)), width = 1.2) + theme_void() + coord_equal() + scale_edge_color_viridis()
 ```
-
-
-
 
 Maybe have the routes potentially get twice as fast, equivalent from max speed moving from 3km/h to 6km/h from off path to on
 
@@ -171,43 +195,53 @@ Maybe have the routes potentially get twice as fast, equivalent from max speed m
 We simulate different spatial patterns of environmental variability using the `NLMR` package.
 
 ```{r}
-null <- matrix(0, nrow = 100, ncol = 100) %>% 
-  raster(xmx = 100, ymx = 100)
+null <- matrix(0, nrow = 210, ncol = 210) %>% 
+  raster(xmx = 210, ymx = 210)
 
-uniform <- matrix(1, nrow = 100, ncol = 100) %>% 
-  raster(xmx = 100, ymx = 100)
+uniform <- matrix(1, nrow = 210, ncol = 210) %>% 
+  raster(xmx = 210, ymx = 210)
 
-random <- nlm_random(100, 100)
+#random <- nlm_random(210, 210)
 
-distance_gradient <- 1- nlm_distancegradient(100, 100, origin = c(0, 10, 0, 10))
+distance_gradient <- 1- nlm_distancegradient(210, 210, origin = c(0, 10, 0, 10))
 
-distance_gradient_center <- 1- nlm_distancegradient(100, 100, origin = c(49, 51, 49, 51))
+distance_gradient_center <- 1- nlm_distancegradient(210, 210, origin = c(105, 105, 105, 105))
 
-oscillation <- distance_gradient * -1 + 1 - nlm_distancegradient(100, 100, origin = c(90, 100, 90, 100))
+oscillation <- distance_gradient * -1 + 1 - nlm_distancegradient(210, 210, origin = c(200, 210, 200, 210))
 
-edge_gradient <- nlm_edgegradient(100, 100, direction = 0)
+edge_gradient <- nlm_edgegradient(210, 210, direction = 0)
 
-planar_gradient <- nlm_planargradient(100, 100, direction = 0)
+planar_gradient <- nlm_planargradient(210, 210, direction = 0)
 
-grf_001 <- nlm_gaussianfield(100, 100, autocorr_range = 1, user_seed = 1000)
-grf_010 <- nlm_gaussianfield(100, 100, autocorr_range = 10, user_seed = 1000)
-grf_100 <- nlm_gaussianfield(100, 100, autocorr_range = 100, user_seed = 1000)
+grf_001 <- nlm_gaussianfield(210, 210, autocorr_range = 1, user_seed = 1000)
+grf_010 <- nlm_gaussianfield(210, 210, autocorr_range = 10, user_seed = 1000)
+grf_100 <- nlm_gaussianfield(210, 210, autocorr_range = 100, user_seed = 1000)
 
 
-env <- brick(null, uniform, random, distance_gradient_center, edge_gradient, oscillation, grf_001, grf_010, grf_100)
+env <-
+```
+
+
+```{r}
+env_names <- c('null', 'uniform', 'random', 'distance_gradient_center', 'edge_gradient', 'oscillation', 'grf_001', 'grf_010', 'grf_100')
+env <- brick(null, uniform, random, distance_gradient_center, edge_gradient, oscillation, grf_001, grf_010, grf_100) %>%
+  `names<-`(env_names) %>%
+  raster::extract(hex, fun = mean, na.rm = TRUE, df = TRUE) %>%
+  bind_cols(hex, .)
 ```
 
 ```{r echo = FALSE}
 env %>%
-  as.data.frame(xy = TRUE, long = TRUE) %>%
-  ggplot(aes(x, y)) +
-  geom_raster(aes(fill = value)) +
-  coord_equal() +
-  facet_wrap(~layer) +
+  gather(variable, value, null:grf_100) %>%
+  mutate(variable = fct_relevel(variable, env_names)) %>%
+  filter(!(variable %in% c('null', 'uniform', 'random'))) %>%
+  ggplot() +
+  geom_sf(aes(fill = value), lwd = .1) +
+  facet_wrap(~variable) +
   theme_void() +
-  scale_fill_viridis_c()
+  scale_fill_viridis_c() +
+  coord_sf(datum = NA)
 ```
-
 
 ## Spatial Interaction Model
 
@@ -243,18 +277,18 @@ nystuen_dacey <- function(net){
 sim_length <- 50 # number of time steps
 
 sim <- accumulate(1:sim_length, ~interact(.x), .init = routes) %>%
-  .[2:sim_length] %>% # remove the initial state
-  map(nystuen_dacey)
+  .[2:sim_length]# remove the initial state
 ```
 
 
 ```{r, echo = FALSE}
 sim %>%
+    map(nystuen_dacey) %>%
   map(as_tibble) %>%
   bind_rows(.id = 'time') %>%
   mutate(time = as.numeric(time)) %>%
 ggplot(aes(x, y, size = population)) +
-  geom_point()+#aes(color = terminal)) +
+  geom_point(aes(color = terminal)) +
   coord_equal() +
   theme_void() +
   labs(title = 'Year: {closest_state}') +
@@ -263,9 +297,11 @@ ggplot(aes(x, y, size = population)) +
 
 ```{r}
 sim[[49]] %>%
+  nystuen_dacey %>%
 ggraph(x = x, y = y) + 
   geom_edge_fan(alpha = .2) +
     geom_node_point(aes(size = population, color = terminal)) +
+  scale_color_manual(values = c('black', 'red')) +
   coord_equal() +
   theme_void()
 ```
