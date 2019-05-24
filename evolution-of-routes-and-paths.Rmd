@@ -40,7 +40,6 @@ library(gganimate)
 library(patchwork)
 library(yenpathy)
 library(gdistance)
-library(furrr)
 ```
 
 
@@ -98,57 +97,47 @@ beta <- 0.15 # distance decay parameter
 ```
 
 
-We make a population of settlements. They all start with a population of `pop_start`, and are distributed randomly over a 100 x 100 space. 
+We make a population of settlements. They all start with a population of `pop_start`, and are distributed evenly over a 100 x 100 space. We define the radius of the hexagonal cell as 5, setting a limit of 5km from a settlement as that settlement's "hinterland."
 
 ```{r}
+radius <- 5
 hex <- c(155, 13, 55, 13, 5, 100, 55, 187, 155, 187, 205, 100, 155, 13) %>%
   matrix(nrow = 7, byrow = 2) %>%
   list %>%
   st_polygon %>% 
-  st_make_grid(cellsize = 10, square = FALSE) %>%
+  st_make_grid(cellsize = radius * 2, square = FALSE) %>%
   st_sf
 
 n <- nrow(hex)
-st_area(hex) %>% sum
+
 pts <- hex %>%
   st_centroid %>%
   st_coordinates
 ```
 
-
+Now we create the physical network of paths connecting all neighboring settlements. 
 ```{r}
 paths <- hex %>% 
-    st_is_within_distance(dist = 1) %>%
-    as.matrix %>% 
-    `*`(1) %>% 
-    as_tbl_graph() %>%
-        mutate(population = pop_start,
-               attractiveness = 1,
-               x = pts[,1],
-               y = pts[,2],
-               xy = st_centroid(st_geometry(hex))) %E>%
-    mutate(distance = st_distance(.N()$xy[from], .N()$xy[to], by_element = TRUE),
-           weight = distance,
-           traffic = 0) %>%
-  filter(!edge_is_loop()) # or implement phi parameter instead
-  
-routes <- paths %>%
-  igraph::distances() %>%
-  as_tbl_graph(directed = TRUE)  %>%
-    mutate(population = pop_start,
-               attractiveness = 1,
-               x = pts[,1],
-               y = pts[,2],
-               xy = st_centroid(st_geometry(hex)))%E>%
-  rename(distance = weight)
-
-paths <- paths %E>%
-  filter(from < to) %>%
-  convert(to_undirected)
+  st_is_within_distance(dist = 1) %>%
+  as.matrix %>% 
+  `*`(1) %>% 
+  as_tbl_graph() %E>%
+  filter(!edge_is_loop(), # or implement phi parameter instead
+          from < to) %>%
+  mutate(distance = weight * radius * 2,
+         effective_distance = distance,
+         traffic = 0,
+         total_traffic = 0) %>%
+  select(-weight) %>%
+  convert(to_undirected) %N>%
+  mutate(x = pts[,1],
+         y = pts[,2],
+         population = pop_start,
+         attractiveness = 1)
 ```
 
-```{r}
-ggraph(paths, x = x, y = y) + 
+```{r, echo = FALSE}
+ggraph(paths) + 
   geom_node_point() +
   geom_edge_link(alpha = .3) +
   coord_equal() +
@@ -156,31 +145,125 @@ ggraph(paths, x = x, y = y) +
 ```
 
 
-we can find the shortest paths this way
+## Spatial Interaction Model
+
+```{r interact}
+k <- 1
+epsilon <- .5
+interact <- function(net){
+  net %E>%
+    mutate(utility = .N()$attractiveness[to] ^ alpha * exp(-beta * effective_distance))  %N>%
+    mutate(outflow = population / centrality_degree(weights = utility,
+                                                    mode = 'out', loops = FALSE)) %E>%
+    mutate(flow = .N()$outflow[from] * utility) %>%
+    select(-utility) %N>%
+    select(-outflow)
+  }
+
+grow <- function(net){
+  net %N>%
+    mutate(inflow = centrality_degree(weights = flow, mode = 'in', loops = FALSE),
+           attractiveness = attractiveness + epsilon * (inflow - k * attractiveness),
+           population = n * pop_start * attractiveness / sum(attractiveness)) %>%
+    select(-inflow)
+}
+
+# k convert units of flow to units of attractiveness. should be 1? we're interpreting units of flow as people, so probably not.... maybe we can say that a 1 of the climate variable is the amount of rain to produce enough food to feed xx people, and rescale from there?
+```
+
+```{r}
+get_distance <- function(net){
+  node_data <- net %N>%
+    as_tibble
+  
+  dist_weights <- net %E>%
+    as_tibble %>%
+    pull(effective_distance)
+  
+  net %>%
+    igraph::distances(weights = dist_weights) %>% # needs weight column
+    as_tbl_graph(directed = TRUE) %>%
+    mutate(!!!node_data) %E>%
+    rename(effective_distance = weight)
+}
+```
 
 ```{r}
 plan(multisession)
-test <- routes %E>%
-  as_tibble %>%
-  mutate(test = future_map2(from, to, ~as.numeric(shortest_paths(paths, .x, .y, output = 'epath')$epath[[1]]), .progress = TRUE))
 
-test2 <- sim %>%
-  map(activate, 'edges') %>%
-  map(as_tibble) %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time = as.numeric(time)) %>%
- # as_tibble %>%
-  select(time, from, to, flow) %>%
-  left_join(test, .) %>%
-  select(from, test, time, flow) %>%
-  group_by(time, from) %>%
-  nest %>%
-  mutate(data = future_map(data, ~unnest(., test))) %>%
-  select(data) %>%
-  unnest(cols = data) %>%
-  group_by(test) %>%
-  summarise(traffic = sum(flow))
 
+
+run_sim <- function(net){
+  tmp <- net %>%
+  get_distance %>%
+  interact %>%
+  grow
+  
+  maintain(tmp, net)
+}
+```
+
+```{r}
+get_paths <- function(from, net){
+    
+  dist_weights <- paths %E>%
+    as_tibble %>%
+    pull(effective_distance)
+  
+  shortest_paths(net, from, weights = dist_weights, output = 'epath') %>%
+    .$epath %>% 
+    map(as.numeric)
+}
+
+
+```
+
+
+```{r}
+improve_path <- function(traffic, a = 0.5, b = 0.0005){
+  (1 - a) * exp(-b * traffic) + a
+}
+
+a <- .5
+b <- .0005
+
+plot(1:10000, improve_path(1:10000, b  = b))
+```
+
+
+
+
+```{r}
+maintain <- function(routes, paths){
+  pop <- as_tibble(routes, 'nodes') %>% pull(population)
+  act <- as_tibble(routes, 'nodes') %>% pull(attractiveness)
+
+  tmp1 <- as_tibble(routes, 'edges') %>%
+    group_by(from) %>%
+      nest %>%
+    mutate(path = map(from, get_paths, net = paths)) %>%
+    select(from, path) %>%
+    unnest(cols = c(path)) %>%
+    mutate(to = rep(1:n, times = n)) %>% 
+    left_join(as_tibble(routes, 'edges'), .) %>%
+    mutate(len = map_dbl(path, length))
+  
+  tmp2 <- tibble(path =  unlist(tmp1$path),
+           flow = rep(tmp1$flow, times = tmp1$len)) %>%
+        group_by(path) %>%
+        summarise(traffic = sum(flow))
+
+  paths %E>%
+    select(-traffic) %>%
+    left_join(tmp2, by = c('.tidygraph_edge_index' = 'path')) %>%
+    mutate(total_traffic = traffic + total_traffic,
+           effective_distance = distance * improve_path(total_traffic)) %N>%
+    mutate(population = pop,
+           attractiveness = act)
+}
+```
+
+```{r}
 paths %>%
   select(-traffic) %>%
   left_join(test2, by = c('.tidygraph_edge_index' = 'test')) %>%
@@ -188,7 +271,20 @@ paths %>%
   ggraph() + geom_edge_link(aes(color = log(traffic)), width = 1.2) + theme_void() + coord_equal() + scale_edge_color_viridis()
 ```
 
-Maybe have the routes potentially get twice as fast, equivalent from max speed moving from 3km/h to 6km/h from off path to on
+
+```{r}
+nystuen_dacey <- function(net){
+  net %E>%
+  group_by(from) %>%
+  filter(flow == max(flow)) %>%
+  ungroup %>%
+  filter(.N()$population[from] < .N()$population[to]) %N>%
+  mutate(terminal = node_is_sink()) %>%
+  convert(to_undirected) 
+}
+
+# try using node_is_ functions to calculate instead
+```
 
 ## Landscape Model
 
@@ -197,28 +293,18 @@ We simulate different spatial patterns of environmental variability using the `N
 ```{r}
 null <- matrix(0, nrow = 210, ncol = 210) %>% 
   raster(xmx = 210, ymx = 210)
-
 uniform <- matrix(1, nrow = 210, ncol = 210) %>% 
   raster(xmx = 210, ymx = 210)
-
 #random <- nlm_random(210, 210)
-
 distance_gradient <- 1- nlm_distancegradient(210, 210, origin = c(0, 10, 0, 10))
-
 distance_gradient_center <- 1- nlm_distancegradient(210, 210, origin = c(105, 105, 105, 105))
-
 oscillation <- distance_gradient * -1 + 1 - nlm_distancegradient(210, 210, origin = c(200, 210, 200, 210))
-
 edge_gradient <- nlm_edgegradient(210, 210, direction = 0)
-
 planar_gradient <- nlm_planargradient(210, 210, direction = 0)
 
 grf_001 <- nlm_gaussianfield(210, 210, autocorr_range = 1, user_seed = 1000)
 grf_010 <- nlm_gaussianfield(210, 210, autocorr_range = 10, user_seed = 1000)
 grf_100 <- nlm_gaussianfield(210, 210, autocorr_range = 100, user_seed = 1000)
-
-
-env <-
 ```
 
 
@@ -243,32 +329,10 @@ env %>%
   coord_sf(datum = NA)
 ```
 
-## Spatial Interaction Model
-
-```{r interact}
-interact <- function(net){
-  net %E>%
-    mutate(interaction_strength = .N()$attractiveness[to] ^ alpha * exp(-beta * distance))  %N>%
-    mutate(outflow = population / centrality_degree(weights = interaction_strength, mode = 'out', loops = FALSE)) %E>%
-    mutate(flow = .N()$outflow[from] * interaction_strength) %N>%
-    mutate(inflow = centrality_degree(weights = flow, mode = 'in', loops = F),
-           attractiveness = attractiveness + 1 * (inflow  - attractiveness),
-           population = n * pop_start * attractiveness / sum(attractiveness))
-}
-```
-
 ```{r}
-nystuen_dacey <- function(net){
-  net %E>%
-  group_by(from) %>%
-  filter(flow == max(flow)) %>%
-  ungroup %>%
-  filter(.N()$population[from] < .N()$population[to]) %N>%
-  mutate(terminal = node_is_sink()) %>%
-  convert(to_undirected) 
-}
+library(profvis)
 
-# try using node_is_ functions to calculate instead
+profvis(run_sim(paths))
 ```
 
 # Results
@@ -276,19 +340,20 @@ nystuen_dacey <- function(net){
 ```{r message = FALSE}
 sim_length <- 50 # number of time steps
 
-sim <- accumulate(1:sim_length, ~interact(.x), .init = routes) %>%
+sim <- accumulate(1:sim_length, ~run_sim(.x), .init = paths) %>%
   .[2:sim_length]# remove the initial state
 ```
 
 
 ```{r, echo = FALSE}
 sim %>%
-    map(nystuen_dacey) %>%
-  map(as_tibble) %>%
+   # map(nystuen_dacey) %>%
+  map(activate, 'nodes') %>%
+   map(as_tibble) %>%
   bind_rows(.id = 'time') %>%
   mutate(time = as.numeric(time)) %>%
 ggplot(aes(x, y, size = population)) +
-  geom_point(aes(color = terminal)) +
+  geom_point()+#aes(color = terminal)) +
   coord_equal() +
   theme_void() +
   labs(title = 'Year: {closest_state}') +
@@ -296,12 +361,28 @@ ggplot(aes(x, y, size = population)) +
 ```
 
 ```{r}
-sim[[49]] %>%
-  nystuen_dacey %>%
+sim[[49]] %E>%
+  arrange(effective_distance) %>%
+ # nystuen_dacey %>%
 ggraph(x = x, y = y) + 
-  geom_edge_fan(alpha = .2) +
-    geom_node_point(aes(size = population, color = terminal)) +
-  scale_color_manual(values = c('black', 'red')) +
+  geom_edge_fan(aes(color = (total_traffic)), width = 1.2) +
+   # geom_node_point(aes(size = population)) +#, color = terminal)) +
+  #scale_color_manual(values = c('black', 'red')) +
+  scale_edge_color_viridis() +
+  coord_equal() +
+  theme_void()
+
+
+sim[[49]] %E>%
+  mutate(effective_distance = -1 * (effective_distance - 10)) %>%
+  arrange(effective_distance) %>%
+  #filter(effective_distance < 6) %>%
+ # nystuen_dacey %>%
+ggraph(x = x, y = y) + 
+  geom_edge_fan(aes(color = effective_distance), width = 2) +
+    geom_node_point(aes(size = population)) +#, color = terminal)) +
+  #scale_color_manual(values = c('black', 'red')) +
+  scale_edge_color_viridis(option = 'A') +
   coord_equal() +
   theme_void()
 ```
