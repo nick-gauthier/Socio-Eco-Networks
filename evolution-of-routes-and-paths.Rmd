@@ -40,6 +40,7 @@ library(gganimate)
 library(patchwork)
 library(yenpathy)
 library(gdistance)
+library(furrr)
 ```
 
 
@@ -92,8 +93,8 @@ Parameters for the model.
 
 ```{r}
 pop_start <- 200 # starting population per settlement
-alpha <- 1.05 # superlinear returns to population size
-beta <- 0.15 # distance decay parameter
+#alpha <- 1.05#1.05 # superlinear returns to population size
+#beta <- 0.15 # distance decay parameter
 ```
 
 
@@ -101,6 +102,7 @@ We make a population of settlements. They all start with a population of `pop_st
 
 ```{r}
 radius <- 5
+
 hex <- c(155, 13, 55, 13, 5, 100, 55, 187, 155, 187, 205, 100, 155, 13) %>%
   matrix(nrow = 7, byrow = 2) %>%
   list %>%
@@ -133,13 +135,14 @@ paths <- hex %>%
   mutate(x = pts[,1],
          y = pts[,2],
          population = pop_start,
-         attractiveness = 1)
+         attractiveness = 1, 
+         edge = centrality_degree() < 6)
 ```
 
 ```{r, echo = FALSE}
 ggraph(paths) + 
-  geom_node_point() +
   geom_edge_link(alpha = .3) +
+    geom_node_point() +
   coord_equal() +
   theme_void()
 ```
@@ -148,9 +151,7 @@ ggraph(paths) +
 ## Spatial Interaction Model
 
 ```{r interact}
-k <- 1
-epsilon <- .5
-interact <- function(net){
+interact <- function(net, alpha = 1.05, beta = 0.2){
   net %E>%
     mutate(utility = .N()$attractiveness[to] ^ alpha * exp(-beta * effective_distance))  %N>%
     mutate(outflow = population / centrality_degree(weights = utility,
@@ -160,9 +161,10 @@ interact <- function(net){
     select(-outflow)
   }
 
-grow <- function(net){
+grow <- function(net, k = 1, epsilon = 0.1, G = 0.1){
   net %N>%
     mutate(inflow = centrality_degree(weights = flow, mode = 'in', loops = FALSE),
+           inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
            attractiveness = attractiveness + epsilon * (inflow - k * attractiveness),
            population = n * pop_start * attractiveness / sum(attractiveness)) %>%
     select(-inflow)
@@ -173,12 +175,9 @@ grow <- function(net){
 
 ```{r}
 get_distance <- function(net){
-  node_data <- net %N>%
-    as_tibble
+  node_data <- as_tibble(net, 'nodes')
   
-  dist_weights <- net %E>%
-    as_tibble %>%
-    pull(effective_distance)
+  dist_weights <- as_tibble(net, 'edges')$effective_distance
   
   net %>%
     igraph::distances(weights = dist_weights) %>% # needs weight column
@@ -188,53 +187,10 @@ get_distance <- function(net){
 }
 ```
 
-```{r}
-plan(multisession)
-
-
-
-run_sim <- function(net){
-  tmp <- net %>%
-  get_distance %>%
-  interact %>%
-  grow
-  
-  maintain(tmp, net)
-}
-```
-
-```{r}
-get_paths <- function(from, net){
-    
-  dist_weights <- paths %E>%
-    as_tibble %>%
-    pull(effective_distance)
-  
-  shortest_paths(net, from, weights = dist_weights, output = 'epath') %>%
-    .$epath %>% 
-    map(as.numeric)
-}
-
-
-```
 
 
 ```{r}
-improve_path <- function(traffic, a = 0.5, b = 0.0005){
-  (1 - a) * exp(-b * traffic) + a
-}
-
-a <- .5
-b <- .0005
-
-plot(1:10000, improve_path(1:10000, b  = b))
-```
-
-
-
-
-```{r}
-maintain <- function(routes, paths){
+maintain <- function(routes, paths, a, b){
   pop <- as_tibble(routes, 'nodes') %>% pull(population)
   act <- as_tibble(routes, 'nodes') %>% pull(attractiveness)
 
@@ -257,20 +213,49 @@ maintain <- function(routes, paths){
     select(-traffic) %>%
     left_join(tmp2, by = c('.tidygraph_edge_index' = 'path')) %>%
     mutate(total_traffic = traffic + total_traffic,
-           effective_distance = distance * improve_path(total_traffic)) %N>%
+           effective_distance = distance * improve_path(total_traffic, a = a, b = b)) %N>%
     mutate(population = pop,
            attractiveness = act)
 }
+
+get_paths <- function(from, net){
+    
+  dist_weights <- paths %E>%
+    as_tibble %>%
+    pull(effective_distance)
+  
+  shortest_paths(net, from, weights = dist_weights, output = 'epath') %>%
+    .$epath %>% 
+    map(as.numeric)
+}
+
+improve_path <- function(traffic, a, b){
+  (1 - a) * exp(-b * traffic) + a
+}
 ```
+
 
 ```{r}
-paths %>%
-  select(-traffic) %>%
-  left_join(test2, by = c('.tidygraph_edge_index' = 'test')) %>%
-  arrange(traffic) %>%
-  ggraph() + geom_edge_link(aes(color = log(traffic)), width = 1.2) + theme_void() + coord_equal() + scale_edge_color_viridis()
+run_sim <- function(net, alpha = 1.05, beta = 0.2, k = 1, epsilon = 0.5, G = 0.1, a = 0.2, b = .0005){
+  tmp <- net %>%
+    get_distance  %E>%
+    # interact
+    mutate(utility = .N()$attractiveness[to] ^ alpha * exp(-beta * effective_distance))  %N>%
+    mutate(outflow = population / centrality_degree(weights = utility,
+                                                    mode = 'out', loops = FALSE)) %E>%
+    mutate(flow = .N()$outflow[from] * utility) %>%
+    select(-utility) %N>%
+    select(-outflow) %>%
+    # grow
+    mutate(inflow = centrality_degree(weights = flow, mode = 'in', loops = FALSE),
+           inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
+           attractiveness = attractiveness + epsilon * (inflow - k * attractiveness),
+           population = n * pop_start * attractiveness / sum(attractiveness)) %>%
+    select(-inflow)
+  
+  #maintain(tmp, net, a, b)
+}
 ```
-
 
 ```{r}
 nystuen_dacey <- function(net){
@@ -309,8 +294,8 @@ grf_100 <- nlm_gaussianfield(210, 210, autocorr_range = 100, user_seed = 1000)
 
 
 ```{r}
-env_names <- c('null', 'uniform', 'random', 'distance_gradient_center', 'edge_gradient', 'oscillation', 'grf_001', 'grf_010', 'grf_100')
-env <- brick(null, uniform, random, distance_gradient_center, edge_gradient, oscillation, grf_001, grf_010, grf_100) %>%
+env_names <- c('null', 'uniform','distance_gradient_center', 'edge_gradient', 'oscillation', 'grf_001', 'grf_010', 'grf_100')
+env <- brick(null, uniform, distance_gradient_center, edge_gradient, oscillation, grf_001, grf_010, grf_100) %>%
   `names<-`(env_names) %>%
   raster::extract(hex, fun = mean, na.rm = TRUE, df = TRUE) %>%
   bind_cols(hex, .)
@@ -332,13 +317,16 @@ env %>%
 ```{r}
 library(profvis)
 
-profvis(run_sim(paths))
+profvis(run_sim(paths, beta = 4))
+
+run_sim(paths, a = .2)
+
 ```
 
 # Results
 
 ```{r message = FALSE}
-sim_length <- 50 # number of time steps
+sim_length <- 100 # number of time steps
 
 sim <- accumulate(1:sim_length, ~run_sim(.x), .init = paths) %>%
   .[2:sim_length]# remove the initial state
@@ -346,7 +334,7 @@ sim <- accumulate(1:sim_length, ~run_sim(.x), .init = paths) %>%
 
 
 ```{r, echo = FALSE}
-sim %>%
+anim <- sim %>%
    # map(nystuen_dacey) %>%
   map(activate, 'nodes') %>%
    map(as_tibble) %>%
@@ -358,14 +346,16 @@ ggplot(aes(x, y, size = population)) +
   theme_void() +
   labs(title = 'Year: {closest_state}') +
   transition_states(time)
+
+animate(anim, nframes = 199)
 ```
 
 ```{r}
-sim[[49]] %E>%
+sim[[sim_length - 1]] %E>%
   arrange(effective_distance) %>%
  # nystuen_dacey %>%
 ggraph(x = x, y = y) + 
-  geom_edge_fan(aes(color = (total_traffic)), width = 1.2) +
+  geom_edge_fan(aes(color = log(total_traffic)), width = 1.2) +
    # geom_node_point(aes(size = population)) +#, color = terminal)) +
   #scale_color_manual(values = c('black', 'red')) +
   scale_edge_color_viridis() +
@@ -373,10 +363,10 @@ ggraph(x = x, y = y) +
   theme_void()
 
 
-sim[[49]] %E>%
+sim[[sim_length - 1]] %E>%
   mutate(effective_distance = -1 * (effective_distance - 10)) %>%
   arrange(effective_distance) %>%
-  #filter(effective_distance < 6) %>%
+  #filter(effective_distance > 4.5) %>%
  # nystuen_dacey %>%
 ggraph(x = x, y = y) + 
   geom_edge_fan(aes(color = effective_distance), width = 2) +
@@ -386,6 +376,18 @@ ggraph(x = x, y = y) +
   coord_equal() +
   theme_void()
 ```
+The outer ring network reminds us of central place theory (Openshaw and Veneris 2003)
+
+
+
+```{r}
+plan(multisession)
+
+param_sweep <- expand.grid(alpha = seq(1, 1.5, by = 0.05),
+       beta = seq(0, 0.5, by = 0.05 )) %>%
+  mutate(sim = future_map2(alpha, beta, function(x, y) reduce(1:sim_length, ~run_sim(., alpha = x, beta = y, a = 1), .init = paths), .progress = TRUE))
+```
+
 
 Here are two sample references: @Feynman1963118 [@Dirac1953888].
 
