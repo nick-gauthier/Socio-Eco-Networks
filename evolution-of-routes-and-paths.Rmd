@@ -63,6 +63,10 @@ Social infrastructure interacts directly with physical infrastructure because so
 
 Regional scale patterns of spatial interaction arise from the decisions of heterogeneous agents interacting with imperfect and incomplete information. They make decisions based on the perceived costs and benefits of interaction, as far as they are able to distinguish them. It is crucial to estimate distribution of each person's subjective predictions about the costs and benefits of social interaction, conditional on the information available to them about each potential destination.
 
+Self organization ... settlemetn patterns represent spontaneous order in response to spatial variability. positive feedbacks
+
+cite crema 2015 for vraying caryying capcity
+
 # Methods
 
 We start with two basic entities, settlements and their hinterlands. Together these make up a simple consumer-resource system, with a population of humans in the settlement consuming agricultural resources from the hinterland. For simplicity, we assume the hinterland produces a fixed amount of food each year, varying only due to exogenous environmental factors (rainfall). The population in a settlement grows logistically, with a carrying capacity defined by the resources in its hinterland.
@@ -100,6 +104,7 @@ pop_start <- 200 # starting population per settlement
 
 We make a population of settlements. They all start with a population of `pop_start`, and are distributed evenly over a 100 x 100 space. We define the radius of the hexagonal cell as 5, setting a limit of 5km from a settlement as that settlement's "hinterland."
 
+Why hexagons (birch et al 2007). Edge effects of the whole hexagonal domainare slo decreased
 ```{r}
 radius <- 5
 
@@ -115,6 +120,14 @@ n <- nrow(hex)
 pts <- hex %>%
   st_centroid %>%
   st_coordinates
+
+tst <- pts
+tst[,2] <- tst[,2] + max(pts[,2]) - min(pts[,2]) * .5
+tst[,1] <- tst[,1] + min(pts[,1])
+plot(rbind(pts, tst))
+
+min(pts[,1])
+max(pts[,2])
 ```
 
 Now we create the physical network of paths connecting all neighboring settlements. 
@@ -124,9 +137,8 @@ paths <- hex %>%
   as.matrix %>% 
   `*`(1) %>% 
   as_tbl_graph() %E>%
-  filter(!edge_is_loop(), # or implement phi parameter instead
-          from < to) %>%
-  mutate(distance = weight * radius * 2,
+  filter( from <= to) %>%#!edge_is_loop(), # or implement phi parameter instead
+  mutate(distance = if_else(edge_is_loop(), 0, weight * radius * 2),
          effective_distance = distance,
          traffic = 0,
          total_traffic = 0) %>%
@@ -134,6 +146,7 @@ paths <- hex %>%
   convert(to_undirected) %N>%
   mutate(x = pts[,1],
          y = pts[,2],
+         food = 200,
          population = pop_start,
          attractiveness = 1, 
          edge = centrality_degree() < 6)
@@ -147,6 +160,49 @@ ggraph(paths) +
   theme_void()
 ```
 
+
+## Landscape Model
+
+We simulate different spatial patterns of environmental variability using the `NLMR` package.
+
+```{r}
+null <- matrix(0, nrow = 210, ncol = 210) %>% 
+  raster(xmx = 210, ymx = 210)
+uniform <- matrix(1, nrow = 210, ncol = 210) %>% 
+  raster(xmx = 210, ymx = 210)
+#random <- nlm_random(210, 210)
+distance_gradient <- 1- nlm_distancegradient(210, 210, origin = c(0, 10, 0, 10))
+distance_gradient_center <- 1- nlm_distancegradient(210, 210, origin = c(105, 105, 105, 105))
+oscillation <- distance_gradient * -1 + 1 - nlm_distancegradient(210, 210, origin = c(200, 210, 200, 210))
+edge_gradient <- nlm_edgegradient(210, 210, direction = 0)
+planar_gradient <- nlm_planargradient(210, 210, direction = 0)
+
+grf_001 <- nlm_gaussianfield(210, 210, autocorr_range = 1, user_seed = 1000)
+grf_010 <- nlm_gaussianfield(210, 210, autocorr_range = 10, user_seed = 1000)
+grf_100 <- nlm_gaussianfield(210, 210, autocorr_range = 100, user_seed = 1000)
+```
+
+
+```{r}
+env_names <- c('null', 'uniform','distance_gradient_center', 'edge_gradient', 'oscillation', 'grf_001', 'grf_010', 'grf_100')
+env <- brick(null, uniform, distance_gradient_center, edge_gradient, oscillation, grf_001, grf_010, grf_100) %>%
+  `names<-`(env_names) %>%
+  raster::extract(hex, fun = mean, na.rm = TRUE, df = TRUE) %>%
+  bind_cols(hex, .)
+```
+
+```{r echo = FALSE}
+env %>%
+  gather(variable, value, null:grf_100) %>%
+  mutate(variable = fct_relevel(variable, env_names)) %>%
+  filter(!(variable %in% c('null', 'uniform', 'random'))) %>%
+  ggplot() +
+  geom_sf(aes(fill = value), lwd = .1) +
+  facet_wrap(~variable) +
+  theme_void() +
+  scale_fill_viridis_c() +
+  coord_sf(datum = NA)
+```
 
 ## Spatial Interaction Model
 
@@ -181,8 +237,10 @@ get_distance <- function(net){
   
   net %>%
     igraph::distances(weights = dist_weights) %>% # needs weight column
+    replace(. == 0, 999) %>% # replace 0 values with 999 temporarily
     as_tbl_graph(directed = TRUE) %>%
     mutate(!!!node_data) %E>%
+    mutate(weight = if_else(weight == 999, 0, weight)) %>%
     rename(effective_distance = weight)
 }
 ```
@@ -234,27 +292,50 @@ improve_path <- function(traffic, a, b){
 }
 ```
 
+So instead of just this have a two sector model. flow of food from hinterland to centers ... this effects their carrying capacity. then flow of people between centers based on carryin capacity and size ... this is the qubbaj et al model with spatial interaction terms. as a first line, we assume that people only draw food from their direct hinterland, so instead we are looking at the flow of people between  the settlements based on food availability.
 
+so does this mean we can vary k or what?
+
+or have it be inflow + local carrying capacity  - k * attractiveness?
+
+so it seems like we want to incorporate carrying capcaity into the population dynamics, not the interaction dynamics. that is the caryring capacity doesn't enter directly into the utilityes, but rather influences the settlement sizes which in turn effects the utilities. hmmmm not sure about this
+
+maybe this is all just to day do the welfare modulated diffuse thing?
+
+or have attractiveness based on food ratio, but the evolution rule only changes population endogenously and caryring capacity is left exogenous
+
+maybe the phi thing from crema 2014 and 2015, with ratio of population to carrying capacity if above carrying capcity
+
+I think there's still room for welfare modulated diffusion here
+
+maybe have another epsioln development thing for migrant with a migration rate like .05
+
+
+OOOOOOOH trade inflow is the attractiveness term for migrant flow
 ```{r}
-run_sim <- function(net, alpha = 1.05, beta = 0.2, k = 1, epsilon = 0.5, G = 0.1, a = 0.2, b = .0005){
-  tmp <- net %>%
-    get_distance  %E>%
+run_sim <- function(net, alpha = 1.05, beta_food = 0.45, beta_people = 0.15, nu = 0.05, k = 1, epsilon = 0.01, G = 0, a = 0.2, b = .0005){
+  net %E>%
+    #get_distance  %E>%
     # interact
-    mutate(utility = .N()$attractiveness[to] ^ alpha * exp(-beta * effective_distance))  %N>%
-    mutate(outflow = population / centrality_degree(weights = utility,
-                                                    mode = 'out', loops = FALSE)) %E>%
-    mutate(flow = .N()$outflow[from] * utility) %>%
-    select(-utility) %N>%
-    select(-outflow) %>%
-    # grow
-    mutate(inflow = centrality_degree(weights = flow, mode = 'in', loops = FALSE),
-           inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
-           attractiveness = attractiveness + epsilon * (inflow - k * attractiveness),
-           population = n * pop_start * attractiveness / sum(attractiveness)) %>%
-    select(-inflow)
+    mutate(trade_utility = .N()$population[to] ^ alpha * exp(-beta_food * effective_distance))  %N>%
+    mutate(trade_outflow = food / centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE)) %E>%
+    mutate(trade_flow = .N()$trade_outflow[from] * trade_utility) %N>% 
+    mutate(trade_inflow = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %E>%
+    mutate(migrant_utility = .N()$trade_inflow[to] * .N()$population[to] ^ (alpha - 1) * exp(-beta_people * effective_distance)) %N>%
+    mutate(migrant_outflow = nu * population / centrality_degree(weights = migrant_utility, mode = 'out', loops = TRUE)) %E>%
+    mutate(migrant_flow = .N()$migrant_outflow[from] * migrant_utility) %N>%        
+    mutate(migrant_inflow = centrality_degree(weights = migrant_flow, mode = 'in', loops = TRUE),
+           #inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
+           population = population + epsilon * (trade_inflow - k * population) - 0.05 * population + migrant_inflow) # %>%
+           #attractiveness = attractiveness + epsilon * (inflow - k * attractiveness),
+           #population = n * pop_start * population / sum(population)) %>%
+    # select(-inflow)
   
   #maintain(tmp, net, a, b)
 }
+```
+```{r}
+(97.5 - 200) * .01
 ```
 
 ```{r}
@@ -271,73 +352,43 @@ nystuen_dacey <- function(net){
 # try using node_is_ functions to calculate instead
 ```
 
-## Landscape Model
-
-We simulate different spatial patterns of environmental variability using the `NLMR` package.
-
-```{r}
-null <- matrix(0, nrow = 210, ncol = 210) %>% 
-  raster(xmx = 210, ymx = 210)
-uniform <- matrix(1, nrow = 210, ncol = 210) %>% 
-  raster(xmx = 210, ymx = 210)
-#random <- nlm_random(210, 210)
-distance_gradient <- 1- nlm_distancegradient(210, 210, origin = c(0, 10, 0, 10))
-distance_gradient_center <- 1- nlm_distancegradient(210, 210, origin = c(105, 105, 105, 105))
-oscillation <- distance_gradient * -1 + 1 - nlm_distancegradient(210, 210, origin = c(200, 210, 200, 210))
-edge_gradient <- nlm_edgegradient(210, 210, direction = 0)
-planar_gradient <- nlm_planargradient(210, 210, direction = 0)
-
-grf_001 <- nlm_gaussianfield(210, 210, autocorr_range = 1, user_seed = 1000)
-grf_010 <- nlm_gaussianfield(210, 210, autocorr_range = 10, user_seed = 1000)
-grf_100 <- nlm_gaussianfield(210, 210, autocorr_range = 100, user_seed = 1000)
-```
-
-
-```{r}
-env_names <- c('null', 'uniform','distance_gradient_center', 'edge_gradient', 'oscillation', 'grf_001', 'grf_010', 'grf_100')
-env <- brick(null, uniform, distance_gradient_center, edge_gradient, oscillation, grf_001, grf_010, grf_100) %>%
-  `names<-`(env_names) %>%
-  raster::extract(hex, fun = mean, na.rm = TRUE, df = TRUE) %>%
-  bind_cols(hex, .)
-```
-
-```{r echo = FALSE}
-env %>%
-  gather(variable, value, null:grf_100) %>%
-  mutate(variable = fct_relevel(variable, env_names)) %>%
-  filter(!(variable %in% c('null', 'uniform', 'random'))) %>%
-  ggplot() +
-  geom_sf(aes(fill = value), lwd = .1) +
-  facet_wrap(~variable) +
-  theme_void() +
-  scale_fill_viridis_c() +
-  coord_sf(datum = NA)
-```
-
 ```{r}
 library(profvis)
 
-profvis(run_sim(paths, beta = 4))
-
-run_sim(paths, a = .2)
-
+profvis(run_sim(paths))
 ```
+
 
 # Results
 
-```{r message = FALSE}
-sim_length <- 100 # number of time steps
+Maybe try running with all environmentalattreativeness and no population feedback, but instead with the growing roads?
 
-sim <- accumulate(1:sim_length, ~run_sim(.x), .init = paths) %>%
+or disaggregate so to attractivenesses are carrying capacity and size relative to carrying capacity?
+
+```{r message = FALSE}
+sim_length <- 200 # number of time steps
+
+sim <- accumulate(1:sim_length, ~run_sim(.x), .init = paths %>% get_distance) %>%
   .[2:sim_length]# remove the initial state
 ```
 
+```{r}
+qplot(seq(.1, 10, by = .1),2 *  sin(seq(.1, 10, by = .1)), geom = 'line')
+```
+
+
+```{r}
+sim <- paths %N>%
+  mutate(food = food * env$edge_gradient) %>%
+  get_distance() %>%
+  accumulate(1:sim_length, ~run_sim(.x), .init = .) %>%
+  .[2:sim_length]# remove the initial state
+```
 
 ```{r, echo = FALSE}
 anim <- sim %>%
    # map(nystuen_dacey) %>%
-  map(activate, 'nodes') %>%
-   map(as_tibble) %>%
+   map(as_tibble, 'nodes') %>%
   bind_rows(.id = 'time') %>%
   mutate(time = as.numeric(time)) %>%
 ggplot(aes(x, y, size = population)) +
@@ -347,16 +398,17 @@ ggplot(aes(x, y, size = population)) +
   labs(title = 'Year: {closest_state}') +
   transition_states(time)
 
-animate(anim, nframes = 199)
+animate(anim, nframes = 399)
 ```
 
 ```{r}
 sim[[sim_length - 1]] %E>%
-  arrange(effective_distance) %>%
+  maintain(paths, a = 1, b = 0) %E>%
+  arrange(traffic) %>%
  # nystuen_dacey %>%
 ggraph(x = x, y = y) + 
-  geom_edge_fan(aes(color = log(total_traffic)), width = 1.2) +
-   # geom_node_point(aes(size = population)) +#, color = terminal)) +
+  geom_edge_fan(aes(color = log(traffic)), width = 1.2) +
+   geom_node_point(aes(size = population)) +#, color = terminal)) +
   #scale_color_manual(values = c('black', 'red')) +
   scale_edge_color_viridis() +
   coord_equal() +
@@ -379,13 +431,129 @@ ggraph(x = x, y = y) +
 The outer ring network reminds us of central place theory (Openshaw and Veneris 2003)
 
 
+So generally we see more settlements with increasing beta. With increasing alpha we get a more defined heirarchy of site sizes.
 
+Past a beta of .4 or whatever, the patterns don't change. this is because at this point, the distance decay function attentuates at or below the baseline 10km distance between settlements. Important to not here that the interperation of the value of beta depends on the characteristic length scale.
 ```{r}
 plan(multisession)
 
 param_sweep <- expand.grid(alpha = seq(1, 1.5, by = 0.05),
        beta = seq(0, 0.5, by = 0.05 )) %>%
-  mutate(sim = future_map2(alpha, beta, function(x, y) reduce(1:sim_length, ~run_sim(., alpha = x, beta = y, a = 1), .init = paths), .progress = TRUE))
+  mutate(sim = future_map2(alpha, beta, function(x, y) reduce(1:sim_length, ~run_sim(., alpha = x, beta = y, G = 0, a = 1), .init = paths), .progress = TRUE))
+
+
+param_sweep[[1,3]]
+
+saveRDS(param_sweep, 'param_sweep')
+param_sweep <- readRDS('param_sweep')
+test <- param_sweep %>%
+  mutate(dat = map(sim, as_tibble, 'nodes')) %>%
+  select(-sim) %>%
+  unnest(cols = c(dat))
+```
+
+"jumps" in the parameter space (clarke and wilson 1983 or 1985, regional science). basically the relationships between alpha and beta are consistent for this
+
+```{r}
+test %>%
+  filter(population, beta > 0) %>%
+  ggplot(aes(log(population))) +
+  geom_density(fill = 'black') +
+  facet_grid(beta ~ alpha) +
+  theme_classic()
+```
+
+```{r}
+test %>%
+  arrange(population) %>%
+  filter(population > 1, 
+         beta > 0) %>%
+  ggplot(aes(x, y, size = population)) +
+  geom_point()+
+  scale_size_area() +
+  coord_equal() +
+  theme_void() +
+  facet_grid(beta ~ alpha)
+
+
+hex %>%
+  mutate(x = pts[,1],
+         y = pts[,2]) %>%
+  left_join(test, .) %>%
+    filter(beta > 0 & beta < 0.4,
+         alpha < 1.4) %>%
+  ggplot() +
+  geom_sf(aes(fill = log(population)), color = 'white', lwd = .1) +
+  scale_fill_viridis_c() +
+  coord_sf(datum = NA) +
+  theme_void() +
+  facet_grid(beta ~ alpha)
+
+
+hex %>%
+  mutate(x = pts[,1],
+         y = pts[,2]) %>%
+  left_join(test, .) %>%
+    filter(population > 1,beta > 0 & beta < 0.4,
+         alpha < 1.4) %>%
+  ggplot() +
+  geom_sf(aes(fill = log(population))) +
+  scale_fill_viridis_c() +
+  coord_sf(datum = NA) +
+  theme_void() +
+  facet_grid(beta ~ alpha)
+
+  ggsave('hex.png', width = 12, height = 8)
+  
+```
+
+
+```{r}
+test2 <- param_sweep %>%
+  mutate(sim = future_map(sim, ~maintain(., paths, a = 1, b = 0), .progress = TRUE))
+  
+test2 %>%
+  .[[121, 3]] %E>%
+  arrange(traffic) %>%
+ggraph(x = x,  y = y) +
+  geom_edge_link(aes(color = log(traffic)), width = 1.2) +
+  scale_edge_color_viridis() +
+  coord_equal() +
+  theme_void()
+  
+test %>%
+  arrange(population) %>%
+  filter(population > 1, 
+         beta > 0 & beta < 0.4,
+         alpha < 1.4) %>%
+  ggplot(aes(x, y, size = population)) +
+  geom_point()+
+  scale_size_area() +
+  coord_equal() +
+  theme_void() +
+  facet_grid(beta ~ alpha)
+```
+run a clustering algorithm on the outputs to determine ?regions
+```{r}
+test3 <- param_sweep %>%
+  mutate(simsim = map(sim, ~filter(., population >= 1)),
+         sim = map(sim, ~mutate(., group = group_components())),
+         dat = map(sim, as_tibble, 'nodes')) %>%
+  select(-sim) %>%
+  unnest(cols = c(dat))
+
+
+param_sweep[[120,3]] %>%
+  filter(population >= 1) %>%
+  mutate(group = group_components())
+
+test3 %>%
+  filter(beta > 0) %>%
+  group_by(alpha, beta, group) %>%
+  summarise(n_cells = n()) %>%
+  ggplot(aes(n_cells)) +
+  geom_histogram() +
+  facet_grid(alpha ~ beta)
 ```
 
 
@@ -394,7 +562,7 @@ Here are two sample references: @Feynman1963118 [@Dirac1953888].
 
 # Discussion
 
-
+Edge effects -- different ways of handling them. Sidestepped here by the shear size of the domain. hexagons have low perimeter to area ratio
 # Conclusion
 
 
