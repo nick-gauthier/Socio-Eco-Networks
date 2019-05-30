@@ -67,6 +67,36 @@ Self organization ... settlemetn patterns represent spontaneous order in respons
 
 cite crema 2015 for vraying caryying capcity
 
+Lotka-Volterra equations are used in ecology to model energy flows in a food web. More generally, these models can represent energy flows in any social-ecological system, such as an agricultural settlement extracting food from the surrounding hinterland. Start with a modified Lotka-Volterra consumer-resource system, in which an aggregate resource stock $X$ is harvested by a population of agriculturalists $N$. Assume $X$ is a renewable resource, so that in the absence of harvesting by $N$ it grows logistically with instantaneous growth rate $r$ and carrying capacity $K$. The rate that resources are harvested from $X$ and used to increase the population of $N$ is proportional to $HXN$, where $H$ is the constant \textit{per capita} harvest rate per unit of resource (for simplicity, assume that one unit of resource $X$ can be converted to one unit of population $N$). In the absence of resources, the population $N$ decays exponentially according to an intrinsic mortality rate $m$. The change in $X$ and $N$ over time can be described as a system of ordinary differential equations:
+
+{\footnotesize  
+  \setlength{\abovedisplayskip}{1pt}
+  \setlength{\belowdisplayskip}{\abovedisplayskip}
+  \setlength{\abovedisplayshortskip}{0pt}
+  \setlength{\belowdisplayshortskip}{1pt}
+\begin{equation}
+    \begin{split}
+        \dot{X} &= rX \left(1 - \frac{X}{K} \right) - HXN\\
+        \dot{N} &= HXN - mN.
+    \end{split}
+\end{equation}}
+
+After \textcite{Qubbaj2014}, this simple model can be extended into a social-ecological network of multiple interconnected consumer-resource systems. First, disaggregate $X$ and $N$ into $X_i$ and $N_j$, representing the resource at location $i$ and the population at location $j$. Then, replace the constant harvest rate $H$ with an adjacency matrix $\mathbf{H}$, such that population $N_j$ harvests resource $X_i$ at rate $H_{ij}$. If $X_i$ and $N_j$ are not connected on the network, then $H_{ij} = 0$. The proposed framework will relax two simplifying assumptions in this basic formulation: the lack of resource and population flows between settlements and the time-invariant intrinsic growth rate and carrying capacity of the resource.
+
+\subsection{Geography: Exchange Networks and Spatial Interaction Models}
+First, allow goods and people to flow between populations in $N$ via an adjacency matrix $\mathbf{E}$, representing a (social) food-exchange network embedded in space. $\mathbf{E}$ is derived from an entropy-maximizing spatial interaction model, which estimates the intensity of interaction between locations as a function of distance and a measure of their mutual "attractiveness" \parencite{Wilson2011EntropyModelling}. Entropy maximization is a means of making unbiased estimates of the most likely distribution of large-scale properties of a system (in this case a spatial network), making the fewest possible assumptions about micro-scale dynamics (social networks) \parencite{Presse2013PrinciplesPhysics}. Models that use entropy maximization to estimate the "fast" flow dynamics and consumer-resource equations such as (1) to represent the ``slow'' settlement dynamics are known as Boltzmann-Lotka-Volterra models \parencite{Wilson2006EcologicalTheory,Wilson2008BoltzmannSystems}, and useful for working with the limited information inherent to the archaeological record \parencite{Bevan2013ModelsEvidence,Davies2014ApplicationAges,Altaweel2015EvaluatingMaximization}.
+
+The distribution of flows in $\mathbf{E}$ with the maximum entropy is determined by maximizing the flow functions subject to simple self-consistency constraints, using the method of Lagrange multipliers \parencite{Wilson2011EntropyModelling}. The maximum entropy solution representing $E_{ij}$, the flow of resources from site $i$ to site $j$, is:
+
+{\footnotesize  
+  \setlength{\abovedisplayskip}{1pt}
+  \setlength{\belowdisplayskip}{\abovedisplayskip}
+  \setlength{\abovedisplayshortskip}{0pt}
+  \setlength{\belowdisplayshortskip}{1pt}
+\begin{equation}
+    E_{ij} = \frac{O_i W_j^\alpha e^{-\beta c_{ij}}}{\sum_kW_k^\alpha e^{-\beta c_{ik}}},
+\end{equation}} where $O_i$ is the total outflows from site $i$, $W$ represents a site's attractiveness to site $i$, and $c$ is some function of distance. $\alpha$ and $\beta$ are parameters derived from the Lagrange multipliers; $\beta$ is particularly relevant here as it determines the impact of distance on flow intensity, and can be varied to represent the different costs of moving food versus people across an exchange network. Here, a site's attractiveness $W$ is its \textit{per capita} food supply, $\frac{N}{X}$. This differs from the standard formulation used in geography and urban studies, where a settlement's attractiveness is only a function of its size \parencite{Evans2011InteractionsModels}. Linking interaction intensity to food supply in this way allows the model to incorporate the influence of climate variability directly.
+
 # Methods
 
 We start with two basic entities, settlements and their hinterlands. Together these make up a simple consumer-resource system, with a population of humans in the settlement consuming agricultural resources from the hinterland. For simplicity, we assume the hinterland produces a fixed amount of food each year, varying only due to exogenous environmental factors (rainfall). The population in a settlement grows logistically, with a carrying capacity defined by the resources in its hinterland.
@@ -96,7 +126,7 @@ The population of a settlement is free to move between other settlements.
 Parameters for the model.
 
 ```{r}
-pop_start <- 200 # starting population per settlement
+pop_start <- 100 # starting population per settlement
 #alpha <- 1.05#1.05 # superlinear returns to population size
 #beta <- 0.15 # distance decay parameter
 ```
@@ -120,14 +150,6 @@ n <- nrow(hex)
 pts <- hex %>%
   st_centroid %>%
   st_coordinates
-
-tst <- pts
-tst[,2] <- tst[,2] + max(pts[,2]) - min(pts[,2]) * .5
-tst[,1] <- tst[,1] + min(pts[,1])
-plot(rbind(pts, tst))
-
-min(pts[,1])
-max(pts[,2])
 ```
 
 Now we create the physical network of paths connecting all neighboring settlements. 
@@ -138,7 +160,7 @@ paths <- hex %>%
   `*`(1) %>% 
   as_tbl_graph() %E>%
   filter( from <= to) %>%#!edge_is_loop(), # or implement phi parameter instead
-  mutate(distance = if_else(edge_is_loop(), 0, weight * radius * 2),
+  mutate(distance = if_else(edge_is_loop(), radius, weight * radius * 2),
          effective_distance = distance,
          traffic = 0,
          total_traffic = 0) %>%
@@ -177,30 +199,33 @@ oscillation <- distance_gradient * -1 + 1 - nlm_distancegradient(210, 210, origi
 edge_gradient <- nlm_edgegradient(210, 210, direction = 0)
 planar_gradient <- nlm_planargradient(210, 210, direction = 0)
 
-grf_001 <- nlm_gaussianfield(210, 210, autocorr_range = 1, user_seed = 1000)
 grf_010 <- nlm_gaussianfield(210, 210, autocorr_range = 10, user_seed = 1000)
 grf_100 <- nlm_gaussianfield(210, 210, autocorr_range = 100, user_seed = 1000)
+grf_1000 <- nlm_gaussianfield(210, 210, autocorr_range = 1000, user_seed = 1000)
 ```
 
 
 ```{r}
-env_names <- c('null', 'uniform','distance_gradient_center', 'edge_gradient', 'oscillation', 'grf_001', 'grf_010', 'grf_100')
-env <- brick(null, uniform, distance_gradient_center, edge_gradient, oscillation, grf_001, grf_010, grf_100) %>%
+env_names <- c('null', 'uniform','distance_gradient_center', 'edge_gradient', 'oscillation', 'grf_010', 'grf_100', 'grf_1000')
+env <- brick(null, uniform, distance_gradient_center, edge_gradient, oscillation, grf_010, grf_100, grf_1000) %>%
   `names<-`(env_names) %>%
   raster::extract(hex, fun = mean, na.rm = TRUE, df = TRUE) %>%
   bind_cols(hex, .)
 ```
 
 ```{r echo = FALSE}
+devtools::install_github("thomasp85/scico")
+
+library(scico)
 env %>%
-  gather(variable, value, null:grf_100) %>%
+  gather(variable, value, null:grf_1000) %>%
   mutate(variable = fct_relevel(variable, env_names)) %>%
   filter(!(variable %in% c('null', 'uniform', 'random'))) %>%
   ggplot() +
   geom_sf(aes(fill = value), lwd = .1) +
   facet_wrap(~variable) +
   theme_void() +
-  scale_fill_viridis_c() +
+  scale_fill_scico(palette = 'roma', direction = -1) +
   coord_sf(datum = NA)
 ```
 
@@ -227,6 +252,26 @@ grow <- function(net, k = 1, epsilon = 0.1, G = 0.1){
 }
 
 # k convert units of flow to units of attractiveness. should be 1? we're interpreting units of flow as people, so probably not.... maybe we can say that a 1 of the climate variable is the amount of rain to produce enough food to feed xx people, and rescale from there?
+```
+
+```{r}
+run_sim <- function(net, alpha = 1.15, beta_food = 0.15, beta_people = 0.25, nu = 0.05, k = 1, epsilon = 0.01, G = 0, a = 0.2, b = .0005){
+  net %E>%
+    #get_distance  %E>%
+    # interact
+    mutate(trade_utility = .N()$population[to] ^ alpha * exp(-beta_food * effective_distance))  %N>%
+    mutate(trade_outflow = food / centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE)) %E>%
+    mutate(trade_flow = .N()$trade_outflow[from] * trade_utility) %N>% 
+    mutate(trade_inflow = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %E>%
+    mutate(migrant_utility = .N()$trade_inflow[to] * .N()$population[to] ^ (alpha - 1) * effective_distance ^ (-beta_people)) %N>%
+    mutate(migrant_outflow = nu * population / centrality_degree(weights = migrant_utility, mode = 'out', loops = FALSE)) %E>%
+    mutate(migrant_flow = .N()$migrant_outflow[from] * migrant_utility) %N>%        
+    mutate(migrant_inflow = centrality_degree(weights = migrant_flow, mode = 'in', loops = FALSE),
+           #inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
+           population = population + epsilon * (trade_inflow - k * population) - nu * population + migrant_inflow))
+
+  #maintain(tmp, net, a, b)
+}
 ```
 
 ```{r}
@@ -263,15 +308,17 @@ maintain <- function(routes, paths, a, b){
     mutate(len = map_dbl(path, length))
   
   tmp2 <- tibble(path =  unlist(tmp1$path),
-           flow = rep(tmp1$flow, times = tmp1$len)) %>%
+           migrant_flow = rep(tmp1$migrant_flow, times = tmp1$len),
+           trade_flow = rep(tmp1$trade_flow, times = tmp1$len)) %>%
         group_by(path) %>%
-        summarise(traffic = sum(flow))
+        summarise(trade_flow = sum(trade_flow),
+                  migrant_flow = sum(migrant_flow))
 
   paths %E>%
     select(-traffic) %>%
-    left_join(tmp2, by = c('.tidygraph_edge_index' = 'path')) %>%
-    mutate(total_traffic = traffic + total_traffic,
-           effective_distance = distance * improve_path(total_traffic, a = a, b = b)) %N>%
+    left_join(tmp2, by = c('.tidygraph_edge_index' = 'path')) %N>%
+  # mutate(total_traffic = traffic + total_traffic,
+   #        effective_distance = distance * improve_path(total_traffic, a = a, b = b)) %N>%
     mutate(population = pop,
            attractiveness = act)
 }
@@ -312,37 +359,13 @@ maybe have another epsioln development thing for migrant with a migration rate l
 
 
 OOOOOOOH trade inflow is the attractiveness term for migrant flow
-```{r}
-run_sim <- function(net, alpha = 1.05, beta_food = 0.45, beta_people = 0.15, nu = 0.05, k = 1, epsilon = 0.01, G = 0, a = 0.2, b = .0005){
-  net %E>%
-    #get_distance  %E>%
-    # interact
-    mutate(trade_utility = .N()$population[to] ^ alpha * exp(-beta_food * effective_distance))  %N>%
-    mutate(trade_outflow = food / centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE)) %E>%
-    mutate(trade_flow = .N()$trade_outflow[from] * trade_utility) %N>% 
-    mutate(trade_inflow = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %E>%
-    mutate(migrant_utility = .N()$trade_inflow[to] * .N()$population[to] ^ (alpha - 1) * exp(-beta_people * effective_distance)) %N>%
-    mutate(migrant_outflow = nu * population / centrality_degree(weights = migrant_utility, mode = 'out', loops = TRUE)) %E>%
-    mutate(migrant_flow = .N()$migrant_outflow[from] * migrant_utility) %N>%        
-    mutate(migrant_inflow = centrality_degree(weights = migrant_flow, mode = 'in', loops = TRUE),
-           #inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
-           population = population + epsilon * (trade_inflow - k * population) - 0.05 * population + migrant_inflow) # %>%
-           #attractiveness = attractiveness + epsilon * (inflow - k * attractiveness),
-           #population = n * pop_start * population / sum(population)) %>%
-    # select(-inflow)
-  
-  #maintain(tmp, net, a, b)
-}
-```
-```{r}
-(97.5 - 200) * .01
-```
+
 
 ```{r}
 nystuen_dacey <- function(net){
   net %E>%
   group_by(from) %>%
-  filter(flow == max(flow)) %>%
+  filter(trade_flow == max(trade_flow)) %>%
   ungroup %>%
   filter(.N()$population[from] < .N()$population[to]) %N>%
   mutate(terminal = node_is_sink()) %>%
@@ -355,7 +378,7 @@ nystuen_dacey <- function(net){
 ```{r}
 library(profvis)
 
-profvis(run_sim(paths))
+profvis(run_sim(get_distances(paths)))
 ```
 
 
@@ -366,7 +389,7 @@ Maybe try running with all environmentalattreativeness and no population feedbac
 or disaggregate so to attractivenesses are carrying capacity and size relative to carrying capacity?
 
 ```{r message = FALSE}
-sim_length <- 200 # number of time steps
+sim_length <- 1000 # number of time steps
 
 sim <- accumulate(1:sim_length, ~run_sim(.x), .init = paths %>% get_distance) %>%
   .[2:sim_length]# remove the initial state
@@ -379,7 +402,8 @@ qplot(seq(.1, 10, by = .1),2 *  sin(seq(.1, 10, by = .1)), geom = 'line')
 
 ```{r}
 sim <- paths %N>%
-  mutate(food = food * env$edge_gradient) %>%
+  #mutate(food = food * env$edge_gradient) %>%
+    mutate(population = population * env$edge_gradient) %>%
   get_distance() %>%
   accumulate(1:sim_length, ~run_sim(.x), .init = .) %>%
   .[2:sim_length]# remove the initial state
@@ -391,6 +415,7 @@ anim <- sim %>%
    map(as_tibble, 'nodes') %>%
   bind_rows(.id = 'time') %>%
   mutate(time = as.numeric(time)) %>%
+  filter(time %% 10 == 0) %>%
 ggplot(aes(x, y, size = population)) +
   geom_point()+#aes(color = terminal)) +
   coord_equal() +
@@ -398,33 +423,43 @@ ggplot(aes(x, y, size = population)) +
   labs(title = 'Year: {closest_state}') +
   transition_states(time)
 
-animate(anim, nframes = 399)
+animate(anim, nframes = 199)
 ```
 
 ```{r}
-sim[[sim_length - 1]] %E>%
+sim[[sim_length - 1]] %>%
+  as_tibble('nodes') %>%
+  qplot(x = log(population),data = .,  geom = 'density')
+sim[[sim_length - 1]]
+
+sim %>%
+  map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time= as.numeric(time)) %>%
+  ggplot(aes(time, population, group = .tidygraph_node_index)) +
+  geom_line(alpha = .2) +
+  theme_classic()
+
+
+test <- sim[[sim_length - 1]] %E>%
   maintain(paths, a = 1, b = 0) %E>%
-  arrange(traffic) %>%
+  arrange(trade) 
  # nystuen_dacey %>%
+
+test %>%
 ggraph(x = x, y = y) + 
-  geom_edge_fan(aes(color = log(traffic)), width = 1.2) +
+  geom_edge_fan(aes(color = log(trade)), width = 1.2) +
    geom_node_point(aes(size = population)) +#, color = terminal)) +
   #scale_color_manual(values = c('black', 'red')) +
   scale_edge_color_viridis() +
   coord_equal() +
   theme_void()
 
-
-sim[[sim_length - 1]] %E>%
-  mutate(effective_distance = -1 * (effective_distance - 10)) %>%
-  arrange(effective_distance) %>%
-  #filter(effective_distance > 4.5) %>%
- # nystuen_dacey %>%
-ggraph(x = x, y = y) + 
-  geom_edge_fan(aes(color = effective_distance), width = 2) +
-    geom_node_point(aes(size = population)) +#, color = terminal)) +
-  #scale_color_manual(values = c('black', 'red')) +
-  scale_edge_color_viridis(option = 'A') +
+sim[[sim_length - 1]] %E>% 
+  nystuen_dacey() %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link() +
+  geom_node_point(aes(size = population)) +
   coord_equal() +
   theme_void()
 ```
@@ -563,6 +598,11 @@ Here are two sample references: @Feynman1963118 [@Dirac1953888].
 # Discussion
 
 Edge effects -- different ways of handling them. Sidestepped here by the shear size of the domain. hexagons have low perimeter to area ratio
+
+Next, allow climate variability to influence resource dynamics. Assume a water-limited environment, so that the growth rate and carrying capacity of the resource represents the limitation of soil moisture on resource growth and abundance. The static parameters $r$ and $K$ are replaced with an unknown function $f\left(X_i, Q_i\right)$, representing logistic growth dependant on soil moisture $Q$ -- such functions are common in ecology \parencite[e.g., see][]{Ursino2007ModelingProcesses} but are kept generic here to enable application in variable ecohydrological contexts. As with $\mathbf{H}$ and $\mathbf{E}$ above, $Q$ can be replaced by an $I \times I$ adjacency matrix $\mathbf{Q}$, representing the pairwise directed moisture fluxes between all $X_i$ resource systems. This moisture-recycling network can be generated synthetically by the modeler, to explore different environmental scenarios, or estimated empirically from gridded observations, climate model outputs, or paleo-reanalysis data.
+
+Empirical estimates of $\mathbf{Q}$ can be derived using functional network analysis, a method for inferring latent connectivity by comparing time series measured at every element of a complex system \parencite{Donges2015UnifiedPackage}. The elements of an empirical $\mathbf{Q}$ correspond to the \textit{transfer entropy} between time series of precipitation minus evapotranspiration (i.e. the land-atmosphere moisture flux) at each grid cell of a climate model. Transfer entropy is an information-theoretic measure analogous to standard measures of correlation, but extended to capture causal dependencies between nonlinear time series \parencite{Runge2012EscapingEntropy}. As such, a functional network representation of climate variability is conceptually and mathematically similar to the empirical orthogonal functions used in the American Southwest case but allows for more direct representations of the circulation dynamics leading to those patterns \parencite{Donges2015}. 
+
 # Conclusion
 
 
@@ -636,3 +676,16 @@ paths <- settlements %E>%
   igraph::as.undirected(mode = 'collapse', edge.attr.comb = 'first') %>%
   as_tbl_graph
 ```
+
+
+# getting rid of edge effects
+```{r}
+tst <- pts
+tst[,2] <- tst[,2] + max(pts[,2]) - min(pts[,2]) * .5
+tst[,1] <- tst[,1] + min(pts[,1])
+plot(rbind(pts, tst))
+
+min(pts[,1])
+max(pts[,2])
+```
+
