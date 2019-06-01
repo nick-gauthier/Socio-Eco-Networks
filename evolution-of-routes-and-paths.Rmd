@@ -19,14 +19,15 @@ output: rticles::elsevier_article
 
 ```{r echo = FALSE, eval = FALSE}
 # Install necessary packages if not already available (not run by default)
-install.packages(c('tidyverse', 'raster', 'NLMR', 'tidygraph', 'gifski', 'png', 'gdistance', 'furrr'))
+install.packages(c('tidyverse', 'raster', 'RandomFields', 'tidygraph', 'gifski', 'png', 'furrr'))
 
 # install the dev versions of these packages from github using devtools
 install.packages('devtools')
 devtools::install_github('thomasp85/ggraph')
 devtools::install_github('thomasp85/gganimate')
+devtools::install_github("thomasp85/scico")
 devtools::install_github('thomasp85/patchwork')
-devtools::install_github('ecohealthalliance/yenpathy')
+#devtools::install_github('ecohealthalliance/yenpathy')
 ```
 
 ```{r, echo = FALSE}
@@ -35,12 +36,11 @@ library(tidyverse)
 library(tidygraph)
 library(ggraph)
 library(sf)
-library(NLMR)
+library(RandomFields)
 library(gganimate)
 library(patchwork)
-library(yenpathy)
-library(gdistance)
 library(furrr)
+library(scico)
 ```
 
 
@@ -102,7 +102,7 @@ The distribution of flows in $\mathbf{E}$ with the maximum entropy is determined
 We start with two basic entities, settlements and their hinterlands. Together these make up a simple consumer-resource system, with a population of humans in the settlement consuming agricultural resources from the hinterland. For simplicity, we assume the hinterland produces a fixed amount of food each year, varying only due to exogenous environmental factors (rainfall). The population in a settlement grows logistically, with a carrying capacity defined by the resources in its hinterland.
 
 ```{r}
-logistic_growth <- function(x, k, r = 0.015){
+logistic_growth <- function(x, k, r = 0.02){
   x * (1 + r * (1 - (x / k)))
 }
 ```
@@ -168,110 +168,9 @@ paths <- hex %>%
   convert(to_undirected) %N>%
   mutate(x = pts[,1],
          y = pts[,2],
-         food = 200,
+         food = 500,
          population = pop_start,
-         attractiveness = 1, 
-         edge = centrality_degree() < 6)
-```
-
-```{r, echo = FALSE}
-ggraph(paths) + 
-  geom_edge_link(alpha = .3) +
-    geom_node_point() +
-  coord_equal() +
-  theme_void()
-```
-
-
-## Landscape Model
-
-We simulate different spatial patterns of environmental variability using the `NLMR` package.
-
-```{r}
-null <- matrix(0, nrow = 210, ncol = 210) %>% 
-  raster(xmx = 210, ymx = 210)
-uniform <- matrix(1, nrow = 210, ncol = 210) %>% 
-  raster(xmx = 210, ymx = 210)
-#random <- nlm_random(210, 210)
-distance_gradient <- 1- nlm_distancegradient(210, 210, origin = c(0, 10, 0, 10))
-distance_gradient_center <- 1- nlm_distancegradient(210, 210, origin = c(105, 105, 105, 105))
-oscillation <- distance_gradient * -1 + 1 - nlm_distancegradient(210, 210, origin = c(200, 210, 200, 210))
-edge_gradient <- nlm_edgegradient(210, 210, direction = 0)
-planar_gradient <- nlm_planargradient(210, 210, direction = 0)
-
-grf_010 <- nlm_gaussianfield(210, 210, autocorr_range = 10, user_seed = 1000)
-grf_100 <- nlm_gaussianfield(210, 210, autocorr_range = 100, user_seed = 1000)
-grf_1000 <- nlm_gaussianfield(210, 210, autocorr_range = 1000, user_seed = 1000)
-```
-
-
-```{r}
-env_names <- c('null', 'uniform','distance_gradient_center', 'edge_gradient', 'oscillation', 'grf_010', 'grf_100', 'grf_1000')
-env <- brick(null, uniform, distance_gradient_center, edge_gradient, oscillation, grf_010, grf_100, grf_1000) %>%
-  `names<-`(env_names) %>%
-  raster::extract(hex, fun = mean, na.rm = TRUE, df = TRUE) %>%
-  bind_cols(hex, .)
-```
-
-```{r echo = FALSE}
-devtools::install_github("thomasp85/scico")
-
-library(scico)
-env %>%
-  gather(variable, value, null:grf_1000) %>%
-  mutate(variable = fct_relevel(variable, env_names)) %>%
-  filter(!(variable %in% c('null', 'uniform', 'random'))) %>%
-  ggplot() +
-  geom_sf(aes(fill = value), lwd = .1) +
-  facet_wrap(~variable) +
-  theme_void() +
-  scale_fill_scico(palette = 'roma', direction = -1) +
-  coord_sf(datum = NA)
-```
-
-## Spatial Interaction Model
-
-```{r interact}
-interact <- function(net, alpha = 1.05, beta = 0.2){
-  net %E>%
-    mutate(utility = .N()$attractiveness[to] ^ alpha * exp(-beta * effective_distance))  %N>%
-    mutate(outflow = population / centrality_degree(weights = utility,
-                                                    mode = 'out', loops = FALSE)) %E>%
-    mutate(flow = .N()$outflow[from] * utility) %>%
-    select(-utility) %N>%
-    select(-outflow)
-  }
-
-grow <- function(net, k = 1, epsilon = 0.1, G = 0.1){
-  net %N>%
-    mutate(inflow = centrality_degree(weights = flow, mode = 'in', loops = FALSE),
-           inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
-           attractiveness = attractiveness + epsilon * (inflow - k * attractiveness),
-           population = n * pop_start * attractiveness / sum(attractiveness)) %>%
-    select(-inflow)
-}
-
-# k convert units of flow to units of attractiveness. should be 1? we're interpreting units of flow as people, so probably not.... maybe we can say that a 1 of the climate variable is the amount of rain to produce enough food to feed xx people, and rescale from there?
-```
-
-```{r}
-run_sim <- function(net, alpha = 1.15, beta_food = 0.15, beta_people = 0.25, nu = 0.05, k = 1, epsilon = 0.01, G = 0, a = 0.2, b = .0005){
-  net %E>%
-    #get_distance  %E>%
-    # interact
-    mutate(trade_utility = .N()$population[to] ^ alpha * exp(-beta_food * effective_distance))  %N>%
-    mutate(trade_outflow = food / centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE)) %E>%
-    mutate(trade_flow = .N()$trade_outflow[from] * trade_utility) %N>% 
-    mutate(trade_inflow = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %E>%
-    mutate(migrant_utility = .N()$trade_inflow[to] * .N()$population[to] ^ (alpha - 1) * effective_distance ^ (-beta_people)) %N>%
-    mutate(migrant_outflow = nu * population / centrality_degree(weights = migrant_utility, mode = 'out', loops = FALSE)) %E>%
-    mutate(migrant_flow = .N()$migrant_outflow[from] * migrant_utility) %N>%        
-    mutate(migrant_inflow = centrality_degree(weights = migrant_flow, mode = 'in', loops = FALSE),
-           #inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
-           population = population + epsilon * (trade_inflow - k * population) - nu * population + migrant_inflow))
-
-  #maintain(tmp, net, a, b)
-}
+         stable = 0)
 ```
 
 ```{r}
@@ -285,17 +184,52 @@ get_distance <- function(net){
     replace(. == 0, 999) %>% # replace 0 values with 999 temporarily
     as_tbl_graph(directed = TRUE) %>%
     mutate(!!!node_data) %E>%
-    mutate(weight = if_else(weight == 999, 0, weight)) %>%
+    mutate(weight = if_else(weight == 999, radius, weight)) %>%
     rename(effective_distance = weight)
 }
 ```
 
+```{r}
+settlements <- get_distance(paths)
+```
+
+
+## Spatial Interaction Model
 
 
 ```{r}
+interact <- function(net, alpha = 0.15, beta_food = 0.15, beta_people = 0.25, nu = 0.05, epsilon = 0.02, k = 1){
+  new_net <- net %E>%
+    # trade
+    mutate(trade_utility = .N()$population[to] ^ (1 + alpha) * exp(-beta_food * effective_distance))  %N>%
+    mutate(trade_outflow = food / centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE)) %E>%
+    mutate(trade_flow = .N()$trade_outflow[from] * trade_utility) %N>% 
+    mutate(trade_inflow = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %E>%
+    # migration
+    mutate(migrant_utility = .N()$trade_inflow[to] * .N()$population[to] ^ (alpha) * effective_distance ^ (-beta_people)) %N>%
+    mutate(migrant_outflow = nu * population / centrality_degree(weights = migrant_utility, mode = 'out', loops = FALSE)) %E>%
+    mutate(migrant_flow = .N()$migrant_outflow[from] * migrant_utility) %>%
+    select(-trade_utility, -migrant_utility) %N>%
+    # population growth
+    mutate(migrant_inflow = centrality_degree(weights = migrant_flow, mode = 'in', loops = FALSE),
+           population_new = population + epsilon * (trade_inflow - k * population ^ (1 - alpha)) - nu * population + migrant_inflow,
+           population_new = if_else(population_new > .0001, population_new, .0001),
+           is_stable = abs((population_new - population) / population) < 0.005,
+           stable = if_else(is_stable == FALSE, 0, stable + 1),
+           population = population_new) %>%
+    select(-c(trade_outflow, trade_inflow, migrant_outflow, migrant_inflow, population_new, is_stable))
+
+   if(sum(pull(new_net, stable) >= 100) < n){
+     return(new_net)
+   } else return(done(new_net))
+}
+```
+
+
+double check that trade flow to home regions is kept by maintain, looks like it nas out rn
+```{r}
 maintain <- function(routes, paths, a, b){
-  pop <- as_tibble(routes, 'nodes') %>% pull(population)
-  act <- as_tibble(routes, 'nodes') %>% pull(attractiveness)
+  pop <- routes %N>% pull(population)
 
   tmp1 <- as_tibble(routes, 'edges') %>%
     group_by(from) %>%
@@ -319,8 +253,7 @@ maintain <- function(routes, paths, a, b){
     left_join(tmp2, by = c('.tidygraph_edge_index' = 'path')) %N>%
   # mutate(total_traffic = traffic + total_traffic,
    #        effective_distance = distance * improve_path(total_traffic, a = a, b = b)) %N>%
-    mutate(population = pop,
-           attractiveness = act)
+    mutate(population = pop)
 }
 
 get_paths <- function(from, net){
@@ -339,33 +272,13 @@ improve_path <- function(traffic, a, b){
 }
 ```
 
-So instead of just this have a two sector model. flow of food from hinterland to centers ... this effects their carrying capacity. then flow of people between centers based on carryin capacity and size ... this is the qubbaj et al model with spatial interaction terms. as a first line, we assume that people only draw food from their direct hinterland, so instead we are looking at the flow of people between  the settlements based on food availability.
-
-so does this mean we can vary k or what?
-
-or have it be inflow + local carrying capacity  - k * attractiveness?
-
-so it seems like we want to incorporate carrying capcaity into the population dynamics, not the interaction dynamics. that is the caryring capacity doesn't enter directly into the utilityes, but rather influences the settlement sizes which in turn effects the utilities. hmmmm not sure about this
-
-maybe this is all just to day do the welfare modulated diffuse thing?
-
-or have attractiveness based on food ratio, but the evolution rule only changes population endogenously and caryring capacity is left exogenous
-
-maybe the phi thing from crema 2014 and 2015, with ratio of population to carrying capacity if above carrying capcity
-
-I think there's still room for welfare modulated diffusion here
-
-maybe have another epsioln development thing for migrant with a migration rate like .05
-
-
-OOOOOOOH trade inflow is the attractiveness term for migrant flow
 
 
 ```{r}
-nystuen_dacey <- function(net){
+nystuen_dacey <- function(net, mode = 'trade'){
   net %E>%
   group_by(from) %>%
-  filter(trade_flow == max(trade_flow)) %>%
+  {if (mode == 'trade') filter(., trade_flow == max(trade_flow)) else filter(., migrant_flow == max(migrant_flow))} %>%
   ungroup %>%
   filter(.N()$population[from] < .N()$population[to]) %N>%
   mutate(terminal = node_is_sink()) %>%
@@ -375,12 +288,61 @@ nystuen_dacey <- function(net){
 # try using node_is_ functions to calculate instead
 ```
 
-```{r}
-library(profvis)
+## Simulation experiments
+We simulate different spatial patterns of environmental variability using the `NLMR` package.
 
-profvis(run_sim(get_distances(paths)))
+```{r}
+
+
+make_grf <- function(x, y, scale){
+  mod <- RandomFields::RMexp(var = 5, scale = 100) + 
+    RandomFields::RMnugget(var = 0.2)
+    
+ RandomFields::RFsimulate(mod, x = pts[,1], y = pts[,2]) %>%
+   .$variable1 %>%
+   scales::rescale(to = c(1, 500))
+}
+
+RFoptions(seed=100)
+env <- paths %>%
+  mutate(constant = 500,
+         random = runif(n(), min = 1, max = 500),
+         grf_100 = make_grf(x, y, 100),
+         gradient_corner = scales::rescale(-1 * node_distance_from(1)),
+         gradient_corner2 = scales::rescale(-1 * node_distance_from(n)),
+         gradient_center = scales::rescale(-1 * node_distance_from(median(1:n))),
+         gradient_oscillation = gradient_corner - gradient_corner2) %>%
+  select(-gradient_corner2) %>%
+  as_tibble %>%
+  select(constant:gradient_oscillation) %>%
+  bind_cols(hex,.)
 ```
 
+```{r echo = FALSE}
+p1 <- env %>%
+  gather(variable, value, constant:grf_100) %>%
+  ggplot() +
+  geom_sf(aes(fill = value), lwd = .1) +
+  facet_wrap(~variable) +
+  theme_void() +
+  scale_fill_scico(palette = 'bamako', direction = -1) +
+  coord_sf(datum = NA)
+
+p2 <- env %>%
+  gather(variable, value, gradient_corner:gradient_oscillation) %>%
+  ggplot() +
+  geom_sf(aes(fill = value), lwd = .1) +
+  facet_wrap(~variable) +
+  theme_void() +
+  scale_fill_scico(palette = 'vik', direction = -1 ) +
+  coord_sf(datum = NA)
+
+p1 / p2 + plot_annotation(tag_levels = 'A')
+```
+
+```{r}
+qplot(seq(.1, 10, by = .1),2 *  sin(seq(.1, 10, by = .1)), geom = 'line')
+```
 
 # Results
 
@@ -388,16 +350,49 @@ Maybe try running with all environmentalattreativeness and no population feedbac
 
 or disaggregate so to attractivenesses are carrying capacity and size relative to carrying capacity?
 
-```{r message = FALSE}
-sim_length <- 1000 # number of time steps
 
-sim <- accumulate(1:sim_length, ~run_sim(.x), .init = paths %>% get_distance) %>%
-  .[2:sim_length]# remove the initial state
+
+
+```{r}
+sim_length <- 300
+sim1 <- reduce(1:sim_length, ~interact(.x, beta_food = .05, beta_people = 1), .init = settlements)
+sim2 <- reduce(1:sim_length, ~interact(.x, beta_food = .001), .init = settlements)
 ```
 
 ```{r}
-qplot(seq(.1, 10, by = .1),2 *  sin(seq(.1, 10, by = .1)), geom = 'line')
+as_tibble(sim1, 'nodes') %>%
+  qplot(x = log(population),data = .,  geom = 'density')
+
+as_tibble(sim1, 'nodes') %>%
+  ggplot(aes(x, y, size = population)) +
+  geom_point()+
+  coord_equal() +
+  theme_void()
+
+test <- sim1 %E>%
+  maintain(paths, a = 1, b = 0) %E>%
+  arrange(trade_flow) 
+ # nystuen_dacey %>%
+
+test %>%
+ggraph(x = x, y = y) + 
+  geom_edge_fan(aes(color = log(trade_flow)), width = 1.2) +
+   geom_node_point(aes(size = population)) +#, color = terminal)) +
+  #scale_color_manual(values = c('black', 'red')) +
+  scale_edge_color_viridis() +
+  coord_equal() +
+  theme_void()
+
+sim1 %E>% 
+  nystuen_dacey() %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(alpha = .1) +
+  geom_node_point(aes(size = population)) +
+  coord_equal() +
+  theme_void()
 ```
+
+now we are testing to see what the difference of initial conditions is ... doesn't look like it matters that much. makes sense, the real initial condition is the relative difference of the population centers
 
 
 ```{r}
@@ -407,6 +402,31 @@ sim <- paths %N>%
   get_distance() %>%
   accumulate(1:sim_length, ~run_sim(.x), .init = .) %>%
   .[2:sim_length]# remove the initial state
+```
+
+
+```{r}
+sim_length <- 800
+sim <- accumulate(1:sim_length, ~interact(.x, beta_food = .1, beta_people = .4), .init = settlements)
+sim2 <- accumulate(1:sim_length, ~interact(.x, beta_food = .1, beta_people = .4), .init = settlements %N>% mutate(food = 1000))
+```
+
+```{r}
+sim %>%
+  map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time= as.numeric(time)) %>%
+  ggplot(aes(time, population, group = .tidygraph_node_index)) +
+  geom_line(alpha = .2) +
+  theme_classic()
+
+sim2 %>%
+  map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time= as.numeric(time)) %>%
+  ggplot(aes(time, population, group = .tidygraph_node_index)) +
+  geom_line(alpha = .2) +
+  theme_classic()
 ```
 
 ```{r, echo = FALSE}
@@ -423,46 +443,11 @@ ggplot(aes(x, y, size = population)) +
   labs(title = 'Year: {closest_state}') +
   transition_states(time)
 
-animate(anim, nframes = 199)
+animate(anim, nframes = 399)
 ```
 
-```{r}
-sim[[sim_length - 1]] %>%
-  as_tibble('nodes') %>%
-  qplot(x = log(population),data = .,  geom = 'density')
-sim[[sim_length - 1]]
-
-sim %>%
-  map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time= as.numeric(time)) %>%
-  ggplot(aes(time, population, group = .tidygraph_node_index)) +
-  geom_line(alpha = .2) +
-  theme_classic()
 
 
-test <- sim[[sim_length - 1]] %E>%
-  maintain(paths, a = 1, b = 0) %E>%
-  arrange(trade) 
- # nystuen_dacey %>%
-
-test %>%
-ggraph(x = x, y = y) + 
-  geom_edge_fan(aes(color = log(trade)), width = 1.2) +
-   geom_node_point(aes(size = population)) +#, color = terminal)) +
-  #scale_color_manual(values = c('black', 'red')) +
-  scale_edge_color_viridis() +
-  coord_equal() +
-  theme_void()
-
-sim[[sim_length - 1]] %E>% 
-  nystuen_dacey() %>%
-  ggraph(x = x, y = y) +
-  geom_edge_link() +
-  geom_node_point(aes(size = population)) +
-  coord_equal() +
-  theme_void()
-```
 The outer ring network reminds us of central place theory (Openshaw and Veneris 2003)
 
 
@@ -472,102 +457,167 @@ Past a beta of .4 or whatever, the patterns don't change. this is because at thi
 ```{r}
 plan(multisession)
 
-param_sweep <- expand.grid(alpha = seq(1, 1.5, by = 0.05),
-       beta = seq(0, 0.5, by = 0.05 )) %>%
-  mutate(sim = future_map2(alpha, beta, function(x, y) reduce(1:sim_length, ~run_sim(., alpha = x, beta = y, G = 0, a = 1), .init = paths), .progress = TRUE))
+param_sweep <- expand_grid(beta_food = c(0, .05, .1, .2, .4),
+                           beta_people = c(0, .2, .4, .8, 1)) %>%
+  mutate(sim = future_map2(beta_food, beta_people, function(x, y) reduce(1:2000, ~interact(., beta_food = x, beta_people = y), .init = settlements), .progress = TRUE))
 
 
-param_sweep[[1,3]]
 
 saveRDS(param_sweep, 'param_sweep')
 param_sweep <- readRDS('param_sweep')
+
 test <- param_sweep %>%
-  mutate(dat = map(sim, as_tibble, 'nodes')) %>%
-  select(-sim) %>%
-  unnest(cols = c(dat))
+  mutate(dat = map(sim, as_tibble, 'nodes'),
+        nd_trade = map(sim, nystuen_dacey),
+         nd_migrants = map(sim, nystuen_dacey, mode = 'migrants'))
+```
+
+
+```{r}
+test %>%
+    select(beta_food, beta_people, nd_trade) %>%
+    mutate(nd = map(nd_trade, as_tibble, 'edges')) %>%
+    unnest(nd) %>%
+  select(beta_food, beta_people, from, to) %>%
+  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(alpha = .5) +
+ # geom_node_point(aes(size = population)) +
+  facet_edges(beta_food ~ beta_people, nrow = 5) +
+  coord_equal() +
+  theme_void()
+```
+
+```{r}
+test %>%
+    select(beta_food, beta_people, nd_migrants) %>%
+    mutate(nd = map(nd_migrants, as_tibble, 'edges')) %>%
+    unnest(nd) %>%
+  select(beta_food, beta_people, from, to) %>%
+  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(alpha = .5) +
+ # geom_node_point(aes(size = population)) +
+  facet_edges(beta_food ~ beta_people, nrow = 5) +
+  coord_equal() +
+  theme_void()
 ```
 
 "jumps" in the parameter space (clarke and wilson 1983 or 1985, regional science). basically the relationships between alpha and beta are consistent for this
 
 ```{r}
 test %>%
-  filter(population, beta > 0) %>%
+  select(beta_food, beta_people, dat) %>%
+  unnest(col = c(dat)) %>%
   ggplot(aes(log(population))) +
   geom_density(fill = 'black') +
-  facet_grid(beta ~ alpha) +
+  facet_grid(beta_food ~ beta_people) +
   theme_classic()
 ```
 
 ```{r}
 test %>%
+  select(beta_food, beta_people, dat) %>%
+  unnest(col = c(dat)) %>%
   arrange(population) %>%
-  filter(population > 1, 
-         beta > 0) %>%
-  ggplot(aes(x, y, size = population)) +
-  geom_point()+
-  scale_size_area() +
+  filter(population > 1) %>%
+  ggplot(aes(x, y)) +
+  geom_point(aes(color = log(population)), size = 1.7)+
+  scale_color_viridis_c() +
   coord_equal() +
   theme_void() +
-  facet_grid(beta ~ alpha)
-
+  facet_grid(beta_food ~ beta_people)
+    
 
 hex %>%
   mutate(x = pts[,1],
          y = pts[,2]) %>%
-  left_join(test, .) %>%
-    filter(beta > 0 & beta < 0.4,
-         alpha < 1.4) %>%
+  left_join(test %>%
+  select(beta_food, beta_people, dat) %>%
+  unnest(col = c(dat)), .) %>%
   ggplot() +
   geom_sf(aes(fill = log(population)), color = 'white', lwd = .1) +
   scale_fill_viridis_c() +
   coord_sf(datum = NA) +
   theme_void() +
-  facet_grid(beta ~ alpha)
+  facet_grid(beta_food ~ beta_people)
 
 
 hex %>%
   mutate(x = pts[,1],
          y = pts[,2]) %>%
-  left_join(test, .) %>%
-    filter(population > 1,beta > 0 & beta < 0.4,
-         alpha < 1.4) %>%
+  left_join(test %>%
+  select(beta_food, beta_people, dat) %>%
+  unnest(col = c(dat)), .) %>%
+  filter(population >= 1) %>%
   ggplot() +
   geom_sf(aes(fill = log(population))) +
   scale_fill_viridis_c() +
   coord_sf(datum = NA) +
   theme_void() +
-  facet_grid(beta ~ alpha)
+  facet_grid(beta_food ~ beta_people)
 
-  ggsave('hex.png', width = 12, height = 8)
+  ggsave('hex2.png', width = 12, height = 8)
   
 ```
 
+How do the stable patterns reflect th underlying functions?
+For exponential, looks like we could reasonably go below 0.05 and still get some interesting stuff
+anything above .45 is too restrictive
+```{r}
+beta_check <- expand_grid(distance = 0:200,
+       beta = seq(0, 1, by = 0.001 )) %>%
+  mutate(exponential = exp(-beta * distance),
+        logarithmic = distance ^ -beta) %>%
+  gather(type, value, exponential:logarithmic)
+```
+```{r}
+beta_check %>% filter(distance == 10, type == 'logarithmic')
+```
+
+Constrain the possible parameter space for both models. For exponential, if beta is too high then food won't move anywhere. so wehre is the threshold? maybe at least 10%. Its .23.
+
+So exponential beta should be .01 to .25
+
+logarithmic beta should be between .4  and 1
 
 ```{r}
-test2 <- param_sweep %>%
-  mutate(sim = future_map(sim, ~maintain(., paths, a = 1, b = 0), .progress = TRUE))
-  
-test2 %>%
-  .[[121, 3]] %E>%
-  arrange(traffic) %>%
-ggraph(x = x,  y = y) +
-  geom_edge_link(aes(color = log(traffic)), width = 1.2) +
-  scale_edge_color_viridis() +
-  coord_equal() +
-  theme_void()
-  
-test %>%
-  arrange(population) %>%
-  filter(population > 1, 
-         beta > 0 & beta < 0.4,
-         alpha < 1.4) %>%
-  ggplot(aes(x, y, size = population)) +
-  geom_point()+
-  scale_size_area() +
-  coord_equal() +
-  theme_void() +
-  facet_grid(beta ~ alpha)
+beta_check %>%
+  filter((distance == 10 | distance == 200), near(value, .1, tol = .01)) %>%
+  group_by(distance, type) %>%
+  summarise(beta = mean(beta)) %>%
+  arrange(type, distance)
+
+200^-.40
 ```
+
+let's pick 5 representatives from each?
+
+```{r}
+
+beta_check %>%
+   filter((type == 'exponential' & between(beta, .01, .25)) | (type == 'logarithmic' & between(beta, .4, 1))) %>% 
+  filter(beta %% .01 == 0) %>%
+  ggplot(aes(distance, value, color = beta, group = beta)) +
+  geom_line(size = 1.2) +
+  geom_vline(xintercept = c(5, 10), color = 'red', linetype = 2) +
+  facet_wrap(~type) +
+  scale_color_viridis_c() +
+  theme_classic()
+
+beta_check %>%
+   filter((type == 'exponential' & beta %in% c(0, .01, .05, .1, .25)) | (type == 'logarithmic' & beta %in% c(0, .2, .4, .8, 1))) %>%
+  ggplot(aes(distance, value, color = beta, group = beta)) +
+  geom_line(size = 1.2) +
+  geom_vline(xintercept = c(5, 10), color = 'red', linetype = 2) +
+  facet_wrap(~type, nrow = 2) +
+  scale_color_viridis_c() +
+  theme_classic()
+
+plot((1:30) ^ -.8)
+```
+
+
 run a clustering algorithm on the outputs to determine ?regions
 ```{r}
 test3 <- param_sweep %>%
@@ -687,5 +737,62 @@ plot(rbind(pts, tst))
 
 min(pts[,1])
 max(pts[,2])
+```
+
+# harris wilson spatial interaction model
+```{r interact}
+interact <- function(net, alpha = 1.05, beta = 0.2){
+  net %E>%
+    mutate(utility = .N()$attractiveness[to] ^ alpha * exp(-beta * effective_distance))  %N>%
+    mutate(outflow = population / centrality_degree(weights = utility,
+                                                    mode = 'out', loops = FALSE)) %E>%
+    mutate(flow = .N()$outflow[from] * utility) %>%
+    select(-utility) %N>%
+    select(-outflow)
+  }
+
+grow <- function(net, k = 1, epsilon = 0.1, G = 0.1){
+  net %N>%
+    mutate(inflow = centrality_degree(weights = flow, mode = 'in', loops = FALSE),
+           inflow = if_else(edge == TRUE, inflow + inflow * G, inflow),
+           attractiveness = attractiveness + epsilon * (inflow - k * attractiveness),
+           population = n * pop_start * attractiveness / sum(attractiveness)) %>%
+    select(-inflow)
+}
+
+# k convert units of flow to units of attractiveness. should be 1? we're interpreting units of flow as people, so probably not.... maybe we can say that a 1 of the climate variable is the amount of rain to produce enough food to feed xx people, and rescale from there?
+```
+
+# run sim code
+need to figure out how to split the ... up to go to both sides. maybe define teh ~interact(...) outside of the accumulate commands?
+
+
+```{r message = FALSE}
+run_sim <- function(init, sim_length = 1000, keep_intermediate = FALSE, ...){
+  if(keep_intermediate == TRUE){
+    sim <- accumulate(1:sim_length, ~interact(.x, ...), .init = init) %>%
+      map(as_tibble, 'nodes') %>%
+      bind_rows(.id = 'time') %>%
+      mutate(time = as.numeric(time)) # remove the initial state
+  } else{
+    sim <- reduce(1:sim_length, ~interact(.x, ...), .init = settlements)
+  }
+
+  return(sim)
+}
+```
+
+### hex sticker for silvanus!
+```{r}
+ paths %>%
+  mutate(grf_100 = make_grf(x, y, 100)) %>%
+  as_tibble %>%
+  select(grf_100) %>%
+  bind_cols(hex,.) %>%
+  ggplot() +
+  geom_sf(aes(fill = value), lwd = .1) +
+  theme_void() +
+  scale_fill_scico(palette = 'oleron') +
+  coord_sf(datum = NA)
 ```
 
