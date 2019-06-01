@@ -168,7 +168,7 @@ paths <- hex %>%
   convert(to_undirected) %N>%
   mutate(x = pts[,1],
          y = pts[,2],
-         food = 500,
+         food = 200,
          population = pop_start,
          stable = 0)
 ```
@@ -198,11 +198,11 @@ settlements <- get_distance(paths)
 
 
 ```{r}
-interact <- function(net, alpha = 0.15, beta_food = 0.15, beta_people = 0.25, nu = 0.05, epsilon = 0.02, k = 1){
+interact <- function(net, fluctuation = 1, alpha = 0.15, beta_food = 0.1, beta_people = 0.6, nu = 0.05, epsilon = 0.02, k = 1){
   new_net <- net %E>%
     # trade
     mutate(trade_utility = .N()$population[to] ^ (1 + alpha) * exp(-beta_food * effective_distance))  %N>%
-    mutate(trade_outflow = food / centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE)) %E>%
+    mutate(trade_outflow = food * (1 + pattern * fluctuation) / centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE)) %E>%
     mutate(trade_flow = .N()$trade_outflow[from] * trade_utility) %N>% 
     mutate(trade_inflow = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %E>%
     # migration
@@ -300,13 +300,13 @@ make_grf <- function(x, y, scale){
     
  RandomFields::RFsimulate(mod, x = pts[,1], y = pts[,2]) %>%
    .$variable1 %>%
-   scales::rescale(to = c(1, 500))
+   scales::rescale(to = c(1, 200))
 }
 
 RFoptions(seed=100)
 env <- paths %>%
-  mutate(constant = 500,
-         random = runif(n(), min = 1, max = 500),
+  mutate(constant = 200,
+         random = runif(n(), min = 1, max = 200),
          grf_100 = make_grf(x, y, 100),
          gradient_corner = scales::rescale(-1 * node_distance_from(1)),
          gradient_corner2 = scales::rescale(-1 * node_distance_from(n)),
@@ -339,9 +339,15 @@ p2 <- env %>%
 
 p1 / p2 + plot_annotation(tag_levels = 'A')
 ```
+```{r}
+env %>%
+  select(constant, gradient_center) %>%
+  ggplot() +
+  geom_sf(aes(fill = constant * (1 + gradient_center * -1)))
+``` 
 
 ```{r}
-qplot(seq(.1, 10, by = .1),2 *  sin(seq(.1, 10, by = .1)), geom = 'line')
+qplot(1:500,sin(1:500 * .05), geom = 'line')
 ```
 
 # Results
@@ -350,101 +356,6 @@ Maybe try running with all environmentalattreativeness and no population feedbac
 
 or disaggregate so to attractivenesses are carrying capacity and size relative to carrying capacity?
 
-
-
-
-```{r}
-sim_length <- 300
-sim1 <- reduce(1:sim_length, ~interact(.x, beta_food = .05, beta_people = 1), .init = settlements)
-sim2 <- reduce(1:sim_length, ~interact(.x, beta_food = .001), .init = settlements)
-```
-
-```{r}
-as_tibble(sim1, 'nodes') %>%
-  qplot(x = log(population),data = .,  geom = 'density')
-
-as_tibble(sim1, 'nodes') %>%
-  ggplot(aes(x, y, size = population)) +
-  geom_point()+
-  coord_equal() +
-  theme_void()
-
-test <- sim1 %E>%
-  maintain(paths, a = 1, b = 0) %E>%
-  arrange(trade_flow) 
- # nystuen_dacey %>%
-
-test %>%
-ggraph(x = x, y = y) + 
-  geom_edge_fan(aes(color = log(trade_flow)), width = 1.2) +
-   geom_node_point(aes(size = population)) +#, color = terminal)) +
-  #scale_color_manual(values = c('black', 'red')) +
-  scale_edge_color_viridis() +
-  coord_equal() +
-  theme_void()
-
-sim1 %E>% 
-  nystuen_dacey() %>%
-  ggraph(x = x, y = y) +
-  geom_edge_link(alpha = .1) +
-  geom_node_point(aes(size = population)) +
-  coord_equal() +
-  theme_void()
-```
-
-now we are testing to see what the difference of initial conditions is ... doesn't look like it matters that much. makes sense, the real initial condition is the relative difference of the population centers
-
-
-```{r}
-sim <- paths %N>%
-  #mutate(food = food * env$edge_gradient) %>%
-    mutate(population = population * env$edge_gradient) %>%
-  get_distance() %>%
-  accumulate(1:sim_length, ~run_sim(.x), .init = .) %>%
-  .[2:sim_length]# remove the initial state
-```
-
-
-```{r}
-sim_length <- 800
-sim <- accumulate(1:sim_length, ~interact(.x, beta_food = .1, beta_people = .4), .init = settlements)
-sim2 <- accumulate(1:sim_length, ~interact(.x, beta_food = .1, beta_people = .4), .init = settlements %N>% mutate(food = 1000))
-```
-
-```{r}
-sim %>%
-  map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time= as.numeric(time)) %>%
-  ggplot(aes(time, population, group = .tidygraph_node_index)) +
-  geom_line(alpha = .2) +
-  theme_classic()
-
-sim2 %>%
-  map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time= as.numeric(time)) %>%
-  ggplot(aes(time, population, group = .tidygraph_node_index)) +
-  geom_line(alpha = .2) +
-  theme_classic()
-```
-
-```{r, echo = FALSE}
-anim <- sim %>%
-   # map(nystuen_dacey) %>%
-   map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time = as.numeric(time)) %>%
-  filter(time %% 10 == 0) %>%
-ggplot(aes(x, y, size = population)) +
-  geom_point()+#aes(color = terminal)) +
-  coord_equal() +
-  theme_void() +
-  labs(title = 'Year: {closest_state}') +
-  transition_states(time)
-
-animate(anim, nframes = 399)
-```
 
 
 
@@ -512,6 +423,24 @@ test %>%
   ggplot(aes(log(population))) +
   geom_density(fill = 'black') +
   facet_grid(beta_food ~ beta_people) +
+  theme_classic()
+```
+Explor the rank size distirbution
+```{r}
+test %>%
+  as_tibble %>%
+      select(beta_food, beta_people, dat) %>%
+  unnest(col = c(dat)) %>%
+  filter(population >= 1) %>%
+  group_by(beta_food, beta_people) %>%
+  arrange(-population) %>%
+  mutate(rank = 1:n()) %>%
+  ggplot(aes(rank, population)) +
+  geom_line() +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_log10() +
+  facet_grid(beta_food ~ beta_people, scales = 'free_y') +
   theme_classic()
 ```
 
@@ -642,10 +571,238 @@ test3 %>%
 ```
 
 
+now we are testing to see what the difference of initial conditions is ... doesn't look like it matters that much. makes sense, the real initial condition is the relative difference of the population centers
+
+
+```{r}
+nsim <- 500
+sim <- settlements %N>%
+   mutate(food = env$grf_100, pattern = 0) %>%
+  accumulate(1:nsim, ~interact(.x), .init = .)
+
+sim2 <- settlements %N>%
+   mutate(food = env$random) %>%
+  accumulate(1:nsim, ~interact(.x), .init = .)
+
+sim3 <- settlements %N>%
+   mutate(food = env$constant) %>%
+  accumulate(1:nsim, ~interact(.x), .init = .)
+```
+
+
+```{r}
+sim %>%
+  map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time= as.numeric(time)) %>%
+  ggplot(aes(time, population, group = .tidygraph_node_index)) +
+  geom_line(alpha = .2) +
+  theme_classic()
+
+sim2 %>%
+  map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time= as.numeric(time)) %>%
+  ggplot(aes(time, population, group = .tidygraph_node_index)) +
+  geom_line(alpha = .2) +
+  theme_classic()
+
+sim3 %>%
+  map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time= as.numeric(time)) %>%
+  ggplot(aes(time, population, group = .tidygraph_node_index)) +
+  geom_line(alpha = .2) +
+  theme_classic()
+```
+
+```{r, echo = FALSE}
+anim <- sim %>%
+   map(nystuen_dacey) %>%
+   map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time = as.numeric(time)) %>%
+  filter(time %% 10 == 0) %>%
+ggplot() +
+    geom_sf(data = env, aes(fill = grf_100)) +
+  geom_point(aes(x, y, size = population))+#aes(color = terminal)) +
+  coord_sf(datum = NA) +
+  scale_fill_scico(palette = 'bamako')
+  theme_void() +
+  labs(title = 'Year: {closest_state}') +
+  transition_states(time)
+
+animate(anim, nframes = 399)
+```
+Below we see that, holding the distance deterrence parameters constant, the degree of spatial autocorrelation in the environment effects equilibrium territory size
+```{r}
+sim[[nsim]] %>%
+  nystuen_dacey() %>%
+  ggraph(x = x, y = y) +
+    geom_sf(data = env, aes(fill = grf_100)) +
+  geom_edge_link(alpha = .5) +
+  scale_size_area() +
+  geom_node_point(aes(size = population))+
+  coord_sf(datum = NA) +
+  scale_fill_scico(palette = 'bamako') +
+  theme_void()
+sim2[[nsim]] %>%
+  nystuen_dacey() %>%
+  ggraph(x = x, y = y) +
+    geom_sf(data = env, aes(fill = random)) +
+  geom_edge_link(alpha = .5) +
+  scale_size_area() +
+  geom_node_point(aes(size = population))+
+  coord_sf(datum = NA) +
+  scale_fill_scico(palette = 'bamako') +
+  theme_void()
+sim3[[nsim]] %>%
+  nystuen_dacey() %>%
+  ggraph(x = x, y = y) +
+    geom_sf(data = env, aes(fill = constant)) +
+  geom_edge_link(alpha = .5) +
+  scale_size_area() +
+  geom_node_point(aes(size = population))+
+  coord_sf(datum = NA) +
+  scale_fill_scico(palette = 'bamako') +
+  theme_void()
+
+sim[[nsim]] %>%
+  nystuen_dacey(mode = 'migrants') %>%
+  ggraph(x = x, y = y) +
+    geom_sf(data = env, aes(fill = grf_100)) +
+  geom_edge_link(alpha = .5) +
+  scale_size_area() +
+  geom_node_point(aes(size = population))+
+  coord_sf(datum = NA) +
+  scale_fill_scico(palette = 'bamako') +
+  theme_void()
+sim2[[nsim]] %>%
+  nystuen_dacey(mode = 'migrants') %>%
+  ggraph(x = x, y = y) +
+    geom_sf(data = env, aes(fill = random)) +
+  geom_edge_link(alpha = .5) +
+  scale_size_area() +
+  geom_node_point(aes(size = population))+
+  coord_sf(datum = NA) +
+  scale_fill_scico(palette = 'bamako') +
+  theme_void()
+sim3[[nsim]] %>%
+  nystuen_dacey(mode = 'migrants') %>%
+  ggraph(x = x, y = y) +
+    geom_sf(data = env, aes(fill = constant)) +
+  geom_edge_link(alpha = .5) +
+  scale_size_area() +
+  geom_node_point(aes(size = population))+
+  coord_sf(datum = NA) +
+  scale_fill_scico(palette = 'bamako') +
+  theme_void()
+```
+We don't see ideal free distribution
+
+There's not a clear relationship between size and local productivity. what about in the region?
+```{r}
+sim[[nsim+1]] %N>%
+  as_tibble %>%
+  bind_cols(env) %>%
+  ggplot(aes(food, population)) +
+  geom_point()
+```
+
+The larger one's hinterland is, the higher the population. not suprising
+```{r}
+sim[[nsim]] %>%
+  mutate(hinterland = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %>%
+  as_tibble() %>%
+  ggplot(aes(hinterland, population)) +
+  geom_point() +
+  geom_smooth()
+```
+
+
+when running time variable, maybe look at ratio of eq pop with and without?
+
+
+## now add time
+also thinking about running these experiments with just a single city
+the problem is that cities die out early and don't have enough time 
+
+it looks like cities will form at equilibrium where environmental variability is the least. but this might depend on the rate of change?
+```{r}
+sim4 <- settlements %N>%
+   mutate(food = env$grf_100,
+          pattern = env$gradient_oscillation) %>%
+  accumulate(sin(1:500 * .05), ~interact(.x, fluctuation = .y), .init = .)
+```
+
+so without scalking behavior you get the crazy initial growth but then it doesn't maintain. with scaling behavior it drops back off
+```{r}
+sim4 %>%
+  map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time= as.numeric(time)) %>% 
+  ggplot(aes(time, (population), group = .tidygraph_node_index)) +
+  geom_line(alpha = .2) +
+  theme_classic()
+```
+```{r}
+sim4[[500]] %>%
+  nystuen_dacey() %>%
+  ggraph(x = x, y = y) +
+    geom_sf(data = env, aes(fill = grf_100)) +
+  geom_edge_link(alpha = .5) +
+  scale_size_area() +
+  geom_node_point(aes(size = population))+
+  coord_sf(datum = NA) +
+  scale_fill_scico(palette = 'bamako') +
+  theme_void()
+```
+```{r}
+sim4[[500]] %>%
+  nystuen_dacey() %>%
+  mutate(group = group_components()) %>%
+  as_tibble %>%
+  bind_cols(env,.) %>%
+  select(x, y, food, population, pattern, group) %>%
+  `st_precision<-`(10) %>%
+  group_by(group) %>%
+  summarise(food = sum(food), population = sum(population), geometry = st_union(geometry)) %>%
+  ggplot() +
+  geom_sf(aes(fill = population)) +
+  scale_fill_scico(palette = 'bamako')
+```
+
+```{r}
+anim <- sim4 %>%
+#   map(nystuen_dacey) %>%
+   map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time = as.numeric(time)) %>%
+ filter(time %% 5 == 0) %>%
+ggplot() +
+  #  geom_sf(data = env, aes(fill = grf_100)) +
+  geom_point(aes(x, y, size = population))+#aes(color = terminal)) +
+  #coord_sf(datum = NA) +
+  coord_equal() +
+  #scale_fill_scico(palette = 'bamako')
+  theme_void() +
+  labs(title = 'Year: {closest_state}') +
+  transition_states(time)
+
+animate(anim, nframes = 199)
+```
+
+It matters less if you're on productive land, more if you have access to productive land no one else does
+
 Here are two sample references: @Feynman1963118 [@Dirac1953888].
 
 
 # Discussion
+constant migration rate
+
+importance of the timing of the onset of the variability regime relative to other stuff
+
+even fluctuation may not be realistic, translate through crop model
 
 Edge effects -- different ways of handling them. Sidestepped here by the shear size of the domain. hexagons have low perimeter to area ratio
 
@@ -768,14 +925,14 @@ need to figure out how to split the ... up to go to both sides. maybe define teh
 
 
 ```{r message = FALSE}
-run_sim <- function(init, sim_length = 1000, keep_intermediate = FALSE, ...){
+run_sim <- function(init, nsim = 1000, keep_intermediate = FALSE, ...){
   if(keep_intermediate == TRUE){
-    sim <- accumulate(1:sim_length, ~interact(.x, ...), .init = init) %>%
+    sim <- accumulate(1:nsim, ~interact(.x, ...), .init = init) %>%
       map(as_tibble, 'nodes') %>%
       bind_rows(.id = 'time') %>%
       mutate(time = as.numeric(time)) # remove the initial state
   } else{
-    sim <- reduce(1:sim_length, ~interact(.x, ...), .init = settlements)
+    sim <- reduce(1:nsim, ~interact(.x, ...), .init = settlements)
   }
 
   return(sim)
