@@ -1,5 +1,5 @@
 ---
-title: The evolution of routes and paths in a dynamic environment
+title: Environmental variability and the evolution of settlement systems
 author:
   - name: Nicolas Gauthier
     email: Nicolas.Gauthier@asu.edu
@@ -13,14 +13,16 @@ abstract:
 journal: "Journal of Archaeological Science"
 date: "`r Sys.Date()`"
 bibliography: mybibfile.bib
-output: rticles::elsevier_article
+output:
+ bookdown::pdf_book:
+  base_format: rticles::elsevier_article
 ---
 
 
 ```{r echo = FALSE, eval = FALSE}
 # Install necessary packages if not already available (not run by default)
 install.packages(c('tidyverse', 'raster', 'RandomFields', 'tidygraph', 'gifski', 'png', 'furrr'))
-
+#bookdown and rticles too?
 # install the dev versions of these packages from github using devtools
 install.packages('devtools')
 devtools::install_github('thomasp85/ggraph')
@@ -30,8 +32,9 @@ devtools::install_github('thomasp85/patchwork')
 #devtools::install_github('ecohealthalliance/yenpathy')
 ```
 
-```{r, echo = FALSE}
-library(raster)
+```{r setup, include=FALSE, mesage = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+
 library(tidyverse)
 library(tidygraph)
 library(ggraph)
@@ -42,7 +45,6 @@ library(patchwork)
 library(furrr)
 library(scico)
 ```
-
 
 # Introduction
 
@@ -57,9 +59,9 @@ We distinguish here between "routes" and "paths". The former is a social constru
 
 
 
-  Sharing and exchange are critical for maintaining population in response to interannual climate variability, although this short term stability can come at the cost of long term environmental degradation \parencite{Janssen2010}. More restricted sharing rules can be effective \parencite{Hegmon1996}, but can also be sensitive to the asymmetric accrual of debts if one party's food supply is more volatile than anothers' \parencite{Crabtree2015}.
+  Sharing and exchange are critical for maintaining population in response to interannual climate variability, although this short term stability can come at the cost of long term environmental degradation [@Janssen2010]. More restricted sharing rules can be effective [@Hegmon1996], but can also be sensitive to the asymmetric accrual of debts if one party's food supply is more volatile than anothers' [@Crabtree2015].
  
-Social infrastructure interacts directly with physical infrastructure because social networks must map onto spatial networks. Metabolic costs, such as the energy expended producing and transporting food over space where transportation infrastructure is sparse, provide constraints on energy flows in exchange systems \parencite{Drennan1984}. In any particular case, the balance between these costs and the metabolic benefits of social interaction influences whether resources are moved in bulk to populations in need, or whether those populations move themselves to the available resources. The topology of spatial networks also constrains who can interact with whom, introducing bottlenecks and other structural flow constraints \parencite{Barthelemy2011SpatialNetworks}. Improvements to transportation infrastructure, such as roads and trails, decrease the effective distance between different settlements; failure to maintain these transportation networks increases the effective distance \parencite{McCall1985TheAfrica}.
+Social infrastructure interacts directly with physical infrastructure because social networks must map onto spatial networks. Metabolic costs, such as the energy expended producing and transporting food over space where transportation infrastructure is sparse, provide constraints on energy flows in exchange systems [@Drennan1984]. In any particular case, the balance between these costs and the metabolic benefits of social interaction influences whether resources are moved in bulk to populations in need, or whether those populations move themselves to the available resources. The topology of spatial networks also constrains who can interact with whom, introducing bottlenecks and other structural flow constraints [@Barthelemy2011SpatialNetworks]. Improvements to transportation infrastructure, such as roads and trails, decrease the effective distance between different settlements; failure to maintain these transportation networks increases the effective distance [@McCall1985TheAfrica].
 
 Regional scale patterns of spatial interaction arise from the decisions of heterogeneous agents interacting with imperfect and incomplete information. They make decisions based on the perceived costs and benefits of interaction, as far as they are able to distinguish them. It is crucial to estimate distribution of each person's subjective predictions about the costs and benefits of social interaction, conditional on the information available to them about each potential destination.
 
@@ -67,76 +69,42 @@ Self organization ... settlemetn patterns represent spontaneous order in respons
 
 cite crema 2015 for vraying caryying capcity
 
-Lotka-Volterra equations are used in ecology to model energy flows in a food web. More generally, these models can represent energy flows in any social-ecological system, such as an agricultural settlement extracting food from the surrounding hinterland. Start with a modified Lotka-Volterra consumer-resource system, in which an aggregate resource stock $X$ is harvested by a population of agriculturalists $N$. Assume $X$ is a renewable resource, so that in the absence of harvesting by $N$ it grows logistically with instantaneous growth rate $r$ and carrying capacity $K$. The rate that resources are harvested from $X$ and used to increase the population of $N$ is proportional to $HXN$, where $H$ is the constant \textit{per capita} harvest rate per unit of resource (for simplicity, assume that one unit of resource $X$ can be converted to one unit of population $N$). In the absence of resources, the population $N$ decays exponentially according to an intrinsic mortality rate $m$. The change in $X$ and $N$ over time can be described as a system of ordinary differential equations:
-
-{\footnotesize  
-  \setlength{\abovedisplayskip}{1pt}
-  \setlength{\belowdisplayskip}{\abovedisplayskip}
-  \setlength{\abovedisplayshortskip}{0pt}
-  \setlength{\belowdisplayshortskip}{1pt}
-\begin{equation}
-    \begin{split}
-        \dot{X} &= rX \left(1 - \frac{X}{K} \right) - HXN\\
-        \dot{N} &= HXN - mN.
-    \end{split}
-\end{equation}}
-
-After \textcite{Qubbaj2014}, this simple model can be extended into a social-ecological network of multiple interconnected consumer-resource systems. First, disaggregate $X$ and $N$ into $X_i$ and $N_j$, representing the resource at location $i$ and the population at location $j$. Then, replace the constant harvest rate $H$ with an adjacency matrix $\mathbf{H}$, such that population $N_j$ harvests resource $X_i$ at rate $H_{ij}$. If $X_i$ and $N_j$ are not connected on the network, then $H_{ij} = 0$. The proposed framework will relax two simplifying assumptions in this basic formulation: the lack of resource and population flows between settlements and the time-invariant intrinsic growth rate and carrying capacity of the resource.
-
-\subsection{Geography: Exchange Networks and Spatial Interaction Models}
-First, allow goods and people to flow between populations in $N$ via an adjacency matrix $\mathbf{E}$, representing a (social) food-exchange network embedded in space. $\mathbf{E}$ is derived from an entropy-maximizing spatial interaction model, which estimates the intensity of interaction between locations as a function of distance and a measure of their mutual "attractiveness" \parencite{Wilson2011EntropyModelling}. Entropy maximization is a means of making unbiased estimates of the most likely distribution of large-scale properties of a system (in this case a spatial network), making the fewest possible assumptions about micro-scale dynamics (social networks) \parencite{Presse2013PrinciplesPhysics}. Models that use entropy maximization to estimate the "fast" flow dynamics and consumer-resource equations such as (1) to represent the ``slow'' settlement dynamics are known as Boltzmann-Lotka-Volterra models \parencite{Wilson2006EcologicalTheory,Wilson2008BoltzmannSystems}, and useful for working with the limited information inherent to the archaeological record \parencite{Bevan2013ModelsEvidence,Davies2014ApplicationAges,Altaweel2015EvaluatingMaximization}.
-
-The distribution of flows in $\mathbf{E}$ with the maximum entropy is determined by maximizing the flow functions subject to simple self-consistency constraints, using the method of Lagrange multipliers \parencite{Wilson2011EntropyModelling}. The maximum entropy solution representing $E_{ij}$, the flow of resources from site $i$ to site $j$, is:
-
-{\footnotesize  
-  \setlength{\abovedisplayskip}{1pt}
-  \setlength{\belowdisplayskip}{\abovedisplayskip}
-  \setlength{\abovedisplayshortskip}{0pt}
-  \setlength{\belowdisplayshortskip}{1pt}
-\begin{equation}
-    E_{ij} = \frac{O_i W_j^\alpha e^{-\beta c_{ij}}}{\sum_kW_k^\alpha e^{-\beta c_{ik}}},
-\end{equation}} where $O_i$ is the total outflows from site $i$, $W$ represents a site's attractiveness to site $i$, and $c$ is some function of distance. $\alpha$ and $\beta$ are parameters derived from the Lagrange multipliers; $\beta$ is particularly relevant here as it determines the impact of distance on flow intensity, and can be varied to represent the different costs of moving food versus people across an exchange network. Here, a site's attractiveness $W$ is its \textit{per capita} food supply, $\frac{N}{X}$. This differs from the standard formulation used in geography and urban studies, where a settlement's attractiveness is only a function of its size \parencite{Evans2011InteractionsModels}. Linking interaction intensity to food supply in this way allows the model to incorporate the influence of climate variability directly.
+Lotka-Volterra equations are used in ecology to model energy flows in a food web. More generally, these models can represent energy flows in any social-ecological system, such as an agricultural settlement extracting food from the surrounding hinterland.
 
 # Methods
 
-We start with two basic entities, settlements and their hinterlands. Together these make up a simple consumer-resource system, with a population of humans in the settlement consuming agricultural resources from the hinterland. For simplicity, we assume the hinterland produces a fixed amount of food each year, varying only due to exogenous environmental factors (rainfall). The population in a settlement grows logistically, with a carrying capacity defined by the resources in its hinterland.
+There are two basic entities in the model, urban settlements and their hinterlands. Together a single settlement-hinterland pair makes up a simple consumer-resource system, with a population of humans consuming the agricultural surplus of its hinterland. The urban population exhibits logistic growth, with a high initial intrinsic growth rate that declines smoothly as the population approaches the carrying capacity set by the resources in the hinterland. This dynamic represented in the difference equation
+
+\begin{equation}
+        \delta N = \epsilon \left(X - kN^\alpha \right),
+\end{equation}
 
 ```{r}
-logistic_growth <- function(x, k, r = 0.02){
-  x * (1 + r * (1 - (x / k)))
-}
+test_fun <- function(N) N + .02 * (1 - N/200) * N
+test_fun(100)
+100 * 200 * .02
+accumulate(1:200, ~test_fun(.x), .init = 50) %>% plot
+
+test_fun2 <- function(N) N + .01 * (200  - N)
+
+
+(1 - 100/200) * 100
+
+200 - 100
+
+1/ .01
+
+((.2 * 1:100) / (1 + .2 * 1:100)) %>% plot
+
+4e-7 / 1e4
 ```
 
-```{r, echo = FALSE}
-accumulate(rep(150, 500), logistic_growth, .init = 15) %>%
-  tibble(time = 0:500, population = .) %>%
-  ggplot(aes(time, population)) +
-  geom_line(size = 1.2) +
-  geom_hline(yintercept = 150, color = 'red', linetype = 2) +
-  ggtitle('Settlement population over 500 years', 'Carrying capacity in red') +
-  theme_classic()
-```
+where $N$ is a population of agriculturalists consuming resource surplus $X$ is harvested by a population of agriculturalists $N$. When the food supply represented by $X$ is abundant, the population  The rate that resources are harvested from $X$ and used to increase the population of $N$ is proportional to $HXN$, where $H$ is the constant \textit{per capita} harvest rate per unit of resource (for simplicity, assume that one unit of resource $X$ can be converted to one unit of population $N$). In the absence of resources, the population $N$ decays exponentially according to an intrinsic mortality rate $m$. The change in $X$ and $N$ over time can be described as a system of ordinary differential equations:
 
-A settlement is not limited to extracting food from its immediate hinterland, but rather can draw on resources from multiple hinterlands at greater distances. The amount of resources harvested from each hinterland is a function of the distance from the settlement to that hinterland. If distance played no role, we could simply add together all the discrete hinterland objects into an aggregate hinterland and recalculate the carrying capacity. Adding in this distance effect reduces this, limiting the areal extent of resource extraction from a site.
-well maybe
+The model does not track only a single settlement-hinterland system, but rather a network of hundreds of interacting settlements and hinterlands (Figure \@ref(fig:spatial-domain)). A settlement is not limited to extracting food from its immediate hinterland, rather it harvests resources from multiple hinterlands. Settlements compete with one another for access to these hinterlands, and the amount of resources harvested by a given settlement is a function of its size the distance from the settlement to that hinterland along the triangular lattice, and competition with other settlements. For simplicity the harvest of resources from hinterlands is referred to as "trade", although it generally reflects any movement of food from one location to a population center in another, such as non-market forms of exchange such as sharing, exchange, or tribute.
 
-The population of a settlement is free to move between other settlements. 
-
-
-Parameters for the model.
-
-```{r}
-pop_start <- 100 # starting population per settlement
-#alpha <- 1.05#1.05 # superlinear returns to population size
-#beta <- 0.15 # distance decay parameter
-```
-
-
-We make a population of settlements. They all start with a population of `pop_start`, and are distributed evenly over a 100 x 100 space. We define the radius of the hexagonal cell as 5, setting a limit of 5km from a settlement as that settlement's "hinterland."
-
-Why hexagons (birch et al 2007). Edge effects of the whole hexagonal domainare slo decreased
-```{r}
-radius <- 5
+```{r settlement_setup}
+radius <- 5 # radius for each hinterland tile
 
 hex <- c(155, 13, 55, 13, 5, 100, 55, 187, 155, 187, 205, 100, 155, 13) %>%
   matrix(nrow = 7, byrow = 2) %>%
@@ -150,16 +118,15 @@ n <- nrow(hex)
 pts <- hex %>%
   st_centroid %>%
   st_coordinates
-```
 
-Now we create the physical network of paths connecting all neighboring settlements. 
-```{r}
+pop_start <- 100 # starting population per settlement
+
 paths <- hex %>% 
   st_is_within_distance(dist = 1) %>%
   as.matrix %>% 
   `*`(1) %>% 
   as_tbl_graph() %E>%
-  filter( from <= to) %>%#!edge_is_loop(), # or implement phi parameter instead
+  filter(from <= to) %>%#!edge_is_loop(), # or implement phi parameter instead
   mutate(distance = if_else(edge_is_loop(), radius, weight * radius * 2),
          effective_distance = distance,
          traffic = 0,
@@ -167,13 +134,8 @@ paths <- hex %>%
   select(-weight) %>%
   convert(to_undirected) %N>%
   mutate(x = pts[,1],
-         y = pts[,2],
-         food = 200,
-         population = pop_start,
-         stable = 0)
-```
+         y = pts[,2])
 
-```{r}
 get_distance <- function(net){
   node_data <- as_tibble(net, 'nodes')
   
@@ -187,14 +149,49 @@ get_distance <- function(net){
     mutate(weight = if_else(weight == 999, radius, weight)) %>%
     rename(effective_distance = weight)
 }
+
+settlements <- paths %N>%
+  mutate(food = 200,
+         population = pop_start,
+         stable = 0) %>%
+  get_distance
 ```
 
-```{r}
-settlements <- get_distance(paths)
+```{r spatial-domain, fig.cap="Spatial domain for the simulation experiments. Hinterlands are 331 evenly sized-hexagons with radius 5km arranged in a continuous tiling with a total size of approximately 200 x 200 km. Settlements are arranged in a triangular lattice located at the centroids of each hexagonal tile, and are connected by a system of physical paths joining each settlement to its six nearest neighbors."}
+ggraph(paths, x = x, y = y) +
+  geom_sf(data = hex, fill = NA, color = 'lightgrey') +
+  geom_edge_link(alpha = .5) +
+  geom_node_point(size = .5) +
+  coord_sf(datum = NA) +
+  theme_void()
 ```
 
+Not only do settlements interact indirectly with one another by harvesting the same hinterland, but also directly by exchanging population through migration flows. Each model year, a fixed proportion of a settlement's population leaves each city. These migrants select their destination based on the distance to potential migration destination and the relative per capita resource extraction rate of each settlement.
 
-## Spatial Interaction Model
+For simplicity, the model does not account for the dynamics of agricultural production in the hinterland directly, and instead assuming a fixed baseline surplus food production each year that can vary only due to exogenous environmental factors (e.g. rainfall). By systematically varying the spatial and temporal patterns of surplus production, the researcher can investigate how the settlement system self organizes in response to those patterns of environmental variability.
+
+## Settlement growth
+
+Settlements grow and decline via one of two processes
+
+
+
+
+ population + epsilon * (trade_inflow - k * population ^ (1 - alpha)) - nu * population + migrant_inflow
+
+After @Qubbaj2014, this simple model can be extended into a social-ecological network of multiple interconnected consumer-resource systems. First, disaggregate $X$ and $N$ into $X_i$ and $N_j$, representing the resource at location $i$ and the population at location $j$. Then, replace the constant harvest rate $H$ with an adjacency matrix $\mathbf{H}$, such that population $N_j$ harvests resource $X_i$ at rate $H_{ij}$. If $X_i$ and $N_j$ are not connected on the network, then $H_{ij} = 0$. The proposed framework will relax two simplifying assumptions in this basic formulation: the lack of resource and population flows between settlements and the time-invariant intrinsic growth rate and carrying capacity of the resource.
+
+## Spatial interaction
+
+First, allow goods and people to flow between populations in $N$ via an adjacency matrix $\mathbf{E}$, representing a (social) food-exchange network embedded in space. $\mathbf{E}$ is derived from an entropy-maximizing spatial interaction model, which estimates the intensity of interaction between locations as a function of distance and a measure of their mutual "attractiveness" [@Wilson2011EntropyModelling]. Entropy maximization is a means of making unbiased estimates of the most likely distribution of large-scale properties of a system (in this case a spatial network), making the fewest possible assumptions about micro-scale dynamics (social networks) [@Presse2013PrinciplesPhysics]. Models that use entropy maximization to estimate the "fast" flow dynamics and consumer-resource equations such as (1) to represent the ``slow'' settlement dynamics are known as Boltzmann-Lotka-Volterra models [@Wilson2006EcologicalTheory,Wilson2008BoltzmannSystems], and useful for working with the limited information inherent to the archaeological record [@Bevan2013ModelsEvidence,Davies2014ApplicationAges,Altaweel2015EvaluatingMaximization].
+
+The distribution of flows in $\mathbf{E}$ with the maximum entropy is determined by maximizing the flow functions subject to simple self-consistency constraints, using the method of Lagrange multipliers [@Wilson2011EntropyModelling]. The maximum entropy solution representing $E_{ij}$, the flow of resources from site $i$ to site $j$, is:
+
+
+\begin{equation}
+    E_{ij} = \frac{O_i W_j^\alpha e^{-\beta c_{ij}}}{\sum_kW_k^\alpha e^{-\beta c_{ik}}},
+\end{equation} 
+where $O_i$ is the total outflows from site $i$, $W$ represents a site's attractiveness to site $i$, and $c$ is some function of distance. $\alpha$ and $\beta$ are parameters derived from the Lagrange multipliers; $\beta$ is particularly relevant here as it determines the impact of distance on flow intensity, and can be varied to represent the different costs of moving food versus people across an exchange network. Here, a site's attractiveness $W$ is its \textit{per capita} food supply, $\frac{N}{X}$. This differs from the standard formulation used in geography and urban studies, where a settlement's attractiveness is only a function of its size [@Evans2011InteractionsModels]. Linking interaction intensity to food supply in this way allows the model to incorporate the influence of climate variability directly.
 
 
 ```{r}
@@ -226,74 +223,12 @@ interact <- function(net, fluctuation = 1, alpha = 0.15, beta_food = 0.1, beta_p
 ```
 
 
-double check that trade flow to home regions is kept by maintain, looks like it nas out rn
-```{r}
-maintain <- function(routes, paths, a, b){
-  pop <- routes %N>% pull(population)
+## Environmental variability
 
-  tmp1 <- as_tibble(routes, 'edges') %>%
-    group_by(from) %>%
-      nest %>%
-    mutate(path = map(from, get_paths, net = paths)) %>%
-    select(from, path) %>%
-    unnest(cols = c(path)) %>%
-    mutate(to = rep(1:n, times = n)) %>% 
-    left_join(as_tibble(routes, 'edges'), .) %>%
-    mutate(len = map_dbl(path, length))
-  
-  tmp2 <- tibble(path =  unlist(tmp1$path),
-           migrant_flow = rep(tmp1$migrant_flow, times = tmp1$len),
-           trade_flow = rep(tmp1$trade_flow, times = tmp1$len)) %>%
-        group_by(path) %>%
-        summarise(trade_flow = sum(trade_flow),
-                  migrant_flow = sum(migrant_flow))
-
-  paths %E>%
-    select(-traffic) %>%
-    left_join(tmp2, by = c('.tidygraph_edge_index' = 'path')) %N>%
-  # mutate(total_traffic = traffic + total_traffic,
-   #        effective_distance = distance * improve_path(total_traffic, a = a, b = b)) %N>%
-    mutate(population = pop)
-}
-
-get_paths <- function(from, net){
-    
-  dist_weights <- paths %E>%
-    as_tibble %>%
-    pull(effective_distance)
-  
-  shortest_paths(net, from, weights = dist_weights, output = 'epath') %>%
-    .$epath %>% 
-    map(as.numeric)
-}
-
-improve_path <- function(traffic, a, b){
-  (1 - a) * exp(-b * traffic) + a
-}
-```
-
-
+### Space
+ 
 
 ```{r}
-nystuen_dacey <- function(net, mode = 'trade'){
-  net %E>%
-  group_by(from) %>%
-  {if (mode == 'trade') filter(., trade_flow == max(trade_flow)) else filter(., migrant_flow == max(migrant_flow))} %>%
-  ungroup %>%
-  filter(.N()$population[from] < .N()$population[to]) %N>%
-  mutate(terminal = node_is_sink()) %>%
-  convert(to_undirected) 
-}
-
-# try using node_is_ functions to calculate instead
-```
-
-## Simulation experiments
-We simulate different spatial patterns of environmental variability using the `NLMR` package.
-
-```{r}
-
-
 make_grf <- function(x, y, scale){
   mod <- RandomFields::RMexp(var = 5, scale = 100) + 
     RandomFields::RMnugget(var = 0.2)
@@ -318,7 +253,7 @@ env <- paths %>%
   bind_cols(hex,.)
 ```
 
-```{r echo = FALSE}
+```{r}
 p1 <- env %>%
   gather(variable, value, constant:grf_100) %>%
   ggplot() +
@@ -339,16 +274,33 @@ p2 <- env %>%
 
 p1 / p2 + plot_annotation(tag_levels = 'A')
 ```
-```{r}
-env %>%
-  select(constant, gradient_center) %>%
-  ggplot() +
-  geom_sf(aes(fill = constant * (1 + gradient_center * -1)))
-``` 
 
+### Time
 ```{r}
 qplot(1:500,sin(1:500 * .05), geom = 'line')
 ```
+
+
+```{r}
+nystuen_dacey <- function(net, mode = 'trade'){
+  net %E>%
+  group_by(from) %>%
+  {if (mode == 'trade') filter(., trade_flow == max(trade_flow)) else filter(., migrant_flow == max(migrant_flow))} %>%
+  ungroup %>%
+  filter(.N()$population[from] < .N()$population[to]) %N>%
+  mutate(terminal = node_is_sink()) %>%
+  convert(to_undirected) 
+}
+
+# try using node_is_ functions to calculate instead
+```
+
+
+
+```{r}
+knitr::knit_exit()
+```
+
 
 # Results
 
@@ -808,7 +760,9 @@ Edge effects -- different ways of handling them. Sidestepped here by the shear s
 
 Next, allow climate variability to influence resource dynamics. Assume a water-limited environment, so that the growth rate and carrying capacity of the resource represents the limitation of soil moisture on resource growth and abundance. The static parameters $r$ and $K$ are replaced with an unknown function $f\left(X_i, Q_i\right)$, representing logistic growth dependant on soil moisture $Q$ -- such functions are common in ecology \parencite[e.g., see][]{Ursino2007ModelingProcesses} but are kept generic here to enable application in variable ecohydrological contexts. As with $\mathbf{H}$ and $\mathbf{E}$ above, $Q$ can be replaced by an $I \times I$ adjacency matrix $\mathbf{Q}$, representing the pairwise directed moisture fluxes between all $X_i$ resource systems. This moisture-recycling network can be generated synthetically by the modeler, to explore different environmental scenarios, or estimated empirically from gridded observations, climate model outputs, or paleo-reanalysis data.
 
-Empirical estimates of $\mathbf{Q}$ can be derived using functional network analysis, a method for inferring latent connectivity by comparing time series measured at every element of a complex system \parencite{Donges2015UnifiedPackage}. The elements of an empirical $\mathbf{Q}$ correspond to the \textit{transfer entropy} between time series of precipitation minus evapotranspiration (i.e. the land-atmosphere moisture flux) at each grid cell of a climate model. Transfer entropy is an information-theoretic measure analogous to standard measures of correlation, but extended to capture causal dependencies between nonlinear time series \parencite{Runge2012EscapingEntropy}. As such, a functional network representation of climate variability is conceptually and mathematically similar to the empirical orthogonal functions used in the American Southwest case but allows for more direct representations of the circulation dynamics leading to those patterns \parencite{Donges2015}. 
+Empirical estimates of $\mathbf{Q}$ can be derived using functional network analysis, a method for inferring latent connectivity by comparing time series measured at every element of a complex system [@Donges2015UnifiedPackage]. The elements of an empirical $\mathbf{Q}$ correspond to the \textit{transfer entropy} between time series of precipitation minus evapotranspiration (i.e. the land-atmosphere moisture flux) at each grid cell of a climate model. Transfer entropy is an information-theoretic measure analogous to standard measures of correlation, but extended to capture causal dependencies between nonlinear time series [@Runge2012EscapingEntropy]. As such, a functional network representation of climate variability is conceptually and mathematically similar to the empirical orthogonal functions used in the American Southwest case but allows for more direct representations of the circulation dynamics leading to those patterns [@Donges2015]. 
+
+Why hexagons (birch et al 2007). Edge effects of the whole hexagonal domainare slo decreased
 
 # Conclusion
 
@@ -953,3 +907,51 @@ run_sim <- function(init, nsim = 1000, keep_intermediate = FALSE, ...){
   coord_sf(datum = NA)
 ```
 
+
+## maintian
+
+double check that trade flow to home regions is kept by maintain, looks like it nas out rn
+```{r}
+maintain <- function(routes, paths, a, b){
+  pop <- routes %N>% pull(population)
+
+  tmp1 <- as_tibble(routes, 'edges') %>%
+    group_by(from) %>%
+      nest %>%
+    mutate(path = map(from, get_paths, net = paths)) %>%
+    select(from, path) %>%
+    unnest(cols = c(path)) %>%
+    mutate(to = rep(1:n, times = n)) %>% 
+    left_join(as_tibble(routes, 'edges'), .) %>%
+    mutate(len = map_dbl(path, length))
+  
+  tmp2 <- tibble(path =  unlist(tmp1$path),
+           migrant_flow = rep(tmp1$migrant_flow, times = tmp1$len),
+           trade_flow = rep(tmp1$trade_flow, times = tmp1$len)) %>%
+        group_by(path) %>%
+        summarise(trade_flow = sum(trade_flow),
+                  migrant_flow = sum(migrant_flow))
+
+  paths %E>%
+    select(-traffic) %>%
+    left_join(tmp2, by = c('.tidygraph_edge_index' = 'path')) %N>%
+  # mutate(total_traffic = traffic + total_traffic,
+   #        effective_distance = distance * improve_path(total_traffic, a = a, b = b)) %N>%
+    mutate(population = pop)
+}
+
+get_paths <- function(from, net){
+    
+  dist_weights <- paths %E>%
+    as_tibble %>%
+    pull(effective_distance)
+  
+  shortest_paths(net, from, weights = dist_weights, output = 'epath') %>%
+    .$epath %>% 
+    map(as.numeric)
+}
+
+improve_path <- function(traffic, a, b){
+  (1 - a) * exp(-b * traffic) + a
+}
+```
