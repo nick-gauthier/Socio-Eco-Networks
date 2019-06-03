@@ -131,7 +131,7 @@ hinterlands <- c(40,-69, -40,-69,-80,0,-40,70,40,69,80,0,40,-69) %>% # changing 
   matrix(nrow = 7, byrow = 2) %>%
   list %>%
   st_polygon %>%
-  st_make_grid(cellsize = radius * sqrt(3), n  = 200, square = FALSE) %>% # st_make_grid wants the short diagonal
+  st_make_grid(cellsize = radius * sqrt(3), square = FALSE) %>% # st_make_grid wants the short diagonal
   st_sf
 
 n <- nrow(hinterlands)
@@ -143,6 +143,7 @@ pts <- hinterlands %>%
 settlements <- hinterlands %>%
   st_centroid %>%
   st_distance %>%
+  round(2) %>%
   replace(. == 0, phi) %>%
   as_tbl_graph %>%
   mutate(population = pop_start,
@@ -153,15 +154,18 @@ settlements <- hinterlands %>%
   rename(distance = weight) %>%
   mutate(trade_flow = 0,
          migrant_flow = 0)
+
+paths <- settlements %E>% 
+  filter(near(distance, sqrt(3) * radius, tol = .1)) %>%
+  igraph::as.undirected() %>%
+  as_tbl_graph()
 ```
 
 
-```{r spatial-domain, fig.cap="Spatial domain for the simulation experiments. The hinterlands are 192 evenly-sized hexagons with radius 5km arranged in a continuous tiling with a total size of approximately 200 x 200 km. Settlements are arranged in a triangular lattice located at the centroids of each hexagonal tile, and are connected by a system of physical paths joining each settlement to its six nearest neighbors."}
-settlements %E>%
-  filter(distance > mean(distance))
+```{r spatial-domain, fig.cap="Spatial domain for the simulation experiments. The hinterlands are 300 evenly-sized hexagons with radius 5km arranged in a continuous tiling with a total size of approximately 19,500 km2. Settlements are arranged in a triangular lattice located at the centroids of each hexagonal tile, and are connected by a system of physical paths joining each settlement to its six nearest neighbors."}
 ggraph(paths, x = x, y = y) +
-  geom_sf(data = hinterlands, fill = NA, color = 'grey20') +
- # geom_edge_link(alpha = .5) +
+  geom_sf(data = hinterlands, fill = NA, color = 'grey65') +
+  #geom_edge_link(alpha = .5) +
   geom_node_point() +
   coord_sf(datum = NA) +
   theme_void()
@@ -183,27 +187,25 @@ where $O_i$ is the total outflows from site $i$, $W$ represents a site's attract
 
 
 ```{r}
-interact <- function(net, fluctuation = 1, alpha_t = 1.15, alpha_m = 1.15, beta_t = 0.1, beta_m = 0.05, nu = 0.05, epsilon = .0001, rmax = .02){
+interact <- function(net, fluctuation = 1, alpha_t = 1, alpha_m = 1, beta1 = 4, beta2 = 10, nu = 0.05, epsilon = .0001, rmax = .02){
   new_net <- net %E>%
     # trade
-      mutate(trade_utility = .N()$population[to] ^ alpha_t * exp(-beta_t * distance))  %N>%
+      mutate(trade_utility = .N()$population[to] ^ alpha_t * exp(-distance / beta1))  %N>%
     mutate(trade_balance = centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE),
            trade_production = food * (1 + pattern * fluctuation)) %E>%
     mutate(trade_flow = .N()$trade_production[from] * trade_utility / .N()$trade_balance[from]) %N>% 
     mutate(harvest = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %E>%
     # migration
-    mutate(migrant_utility = (.N()$harvest[to] / .N()$population[to]) ^ alpha_m * exp(-beta_m * distance)) %N>%
+    mutate(migrant_utility = (.N()$harvest[to] / .N()$population[to]) ^ alpha_m * exp(-distance / beta2)) %N>%
     mutate(migrant_balance = centrality_degree(weights = migrant_utility, mode = 'out', loops = TRUE),
            migrant_production = nu * population) %E>% # * (population / harvest) ^ 2) %E>%  # explore this
     mutate(migrant_flow = .N()$migrant_production[from] * migrant_utility / .N()$migrant_balance[from])  %N>%
     mutate(immigrants = centrality_degree(weights = migrant_flow, mode = 'in', loops = TRUE)) %>%
     # population growth
-    mutate(population_new = population + .0001 * population * (harvest - population ^ .85) - migrant_production + immigrants, # ^ (1 - 1.15 + 1)
-           population_new = population + .02 * population * (1 - population / harvest), #- migrant_production + immigrants , 
-           population_new = population + population * pmin(epsilon * (harvest - population ^ .85), rmax), #- migrant_production + immigrants,
+    mutate(population_new = population + population * pmin(epsilon * (harvest - population ^ .85), rmax) - migrant_production + immigrants,
            population_new = if_else(population_new > .0001, population_new, .0001),
            is_stable = abs((population_new - population) / population) < 0.0001,
-            stable = if_else(is_stable == FALSE, 0, stable + 1),
+           stable = if_else(is_stable == FALSE, 0, stable + 1),
            population = population_new) %>%
     select(-c(trade_balance:trade_production, migrant_balance:migrant_production, population_new, is_stable)) %E>%
     select(-c(trade_utility, migrant_utility)) %>%
@@ -229,31 +231,27 @@ The model does not account for the dynamics of agricultural production in the hi
 
 ```{r}
 make_grf <- function(x, y, scale){
-  mod <- RandomFields::RMexp(var = 5, scale = scale) + 
-    RandomFields::RMnugget(var = 0.2)
-    
- RandomFields::RFsimulate(mod, x = pts[,1], y = pts[,2]) %>%
-   .$variable1 %>%
-   scales::rescale(to = c(1, food_start))
+  mod <- RMexp(var = (food_start / 2)^2, scale = scale) + 
+    RMnugget(var = .5) + 
+    RMtrend(mean = food_start)
+   RFsimulate(mod, x = x, y = y)$variable1
 }
 
 RFoptions(seed=100)
-env <- paths %>%
+env <- settlements %N>%
   mutate(constant = food_start,
-         #random = runif(n(), min = 1, max = food_start),
-         grf_001 = make_grf(x, y, 1),
-         grf_010 = make_grf(x, y, 10),
-         grf_100 = make_grf(x, y, 100),
-         gradient = scales::rescale(-1 * node_distance_from(1)),
-         gradient2 = scales::rescale(node_distance_from(n)),
-         #gradient_center = scales::rescale(-1 * node_distance_from(median(1:n))),
+         grf_01 = make_grf(x, y, 1),
+         grf_15 = make_grf(x, y, 15),
+         grf_50 = make_grf(x, y, 50),
+         gradient = scales::rescale(-1 * node_distance_from(1, weights = distance)),
+         gradient2 = scales::rescale(node_distance_from(n, weights = distance)),
          oscillation = gradient + gradient2 - 1) %>%
   select(-gradient2) %>%
   as_tibble %>%
-  bind_cols(hex,.)
+  bind_cols(hinterlands,.)
+# think about scaling more
 
-forcing_function <- expand_grid(time = 1:500,
-       omega = c(.01, .05, .3)) %>%
+forcing_function <- expand_grid(time = 1:500, omega = c(.01, .05, .3)) %>%
   mutate(value = map2_dbl(time, omega, ~sin(.x * .y)))
 ```
 
@@ -278,12 +276,12 @@ p2 <- env %>%
   coord_sf(datum = NA)
 
 p3 <- env %>%
-  gather(variable, value, grf_001:grf_100) %>%
+  gather(variable, value, grf_01:grf_50) %>%
   mutate(variable = as.ordered(variable),
          variable = fct_recode(variable,
-                               'Autocorrelation scale = 1km' = 'grf_001',
-                               'Autocorrelation scale = 10km' = 'grf_010',
-                               'Autocorrelation scale = 100km' = 'grf_100')) %>%
+                               'Autocorrelation scale = 1km' = 'grf_01',
+                               'Autocorrelation scale = 15km' = 'grf_15',
+                               'Autocorrelation scale = 50km' = 'grf_50')) %>%
   ggplot() +
   geom_sf(aes(fill = value), lwd = .1) +
   facet_wrap(~variable, nrow = 1) +
@@ -294,7 +292,6 @@ p3 <- env %>%
 
 p3 / (p1 + p2) + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(2, 1))
 ```
-
 
 ```{r}
 nystuen_dacey <- function(net, mode = 'trade'){
@@ -335,11 +332,11 @@ Past a beta of .4 or whatever, the patterns don't change. this is because at thi
 ```{r}
 plan(multisession)
 
-param_sweep <- expand_grid(beta_t = c(0, .05, .1, .2, .4),
-                           beta_m = c(0, .2, .4, .8, 1)) %>%
-  mutate(sim = future_map2(beta_t, beta_m, function(x, y) reduce(1:2000, ~interact(., beta_t = x, beta_m = y), .init = settlements), .progress = TRUE))
+beta_sweep <- expand_grid(beta1 = c(0, 5, 10, 15, 20),
+                           beta2 = c(0, 5, 10, 15, 20)) %>%
+  mutate(sim = future_map2(beta1, beta2, function(x, y) reduce(1:2000, ~interact(., beta1 = x, beta2 = y), .init = settlements), .progress = TRUE))
 
-
+1/20
 
 saveRDS(param_sweep, 'param_sweep')
 param_sweep <- readRDS('param_sweep')
