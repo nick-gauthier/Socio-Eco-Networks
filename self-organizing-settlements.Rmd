@@ -21,16 +21,15 @@ output:
 
 ```{r echo = FALSE, eval = FALSE}
 # Install necessary packages if not already available (not run by default)
-install.packages(c('tidyverse', 'raster', 'RandomFields', 'tidygraph', 'gifski', 'png', 'furrr'))
+install.packages(c('tidyverse', 'RandomFields', 'tidygraph', 'gifski', 'png', 'furrr'))
 #bookdown and rticles too?
 # install the dev versions of these packages from github using devtools
 install.packages('devtools')
+devtools::install_github('tidyverse/tidyr')
 devtools::install_github('thomasp85/ggraph')
 devtools::install_github('thomasp85/gganimate')
 devtools::install_github("thomasp85/scico")
 devtools::install_github('thomasp85/patchwork')
-devtools::install_github('r-spatial/sf') # need dev version for fix in st_make_Grid cell size
-#devtools::install_github('ecohealthalliance/yenpathy')
 ```
 
 ```{r setup, include=FALSE, mesage = FALSE}
@@ -49,33 +48,27 @@ library(scico)
 
 # Introduction
 
-Paths are physical as well as social infrastructure. Hence the dynamics.
-
-
-Archaeology is embracing the form of constrained spatial interaction modeling developed by Wilson. These Boltzmann-Lotka-Volterra (BLV) style models use maximum entropy spatial interaction models to allocate flows between a spatially structured metapopulation, and Lotka-Volterra style consumer-resource equations to govern the growth of the populations. These equations are able to capture the dynamic feedbacks between settlements and the networks connecting them. Recent work in archaeology has expanded these models to allow the networks to further evolve, as routes that are more often used to connect important sites become themselves important, which in turn shapes the growth of settlements close to those routes. Past work has shown how stable routes and sets of routes can develop in mountainous topography, where physical constraints on movement are able to constrain the possible routes between settlements. 
-  
-Here, I extend this approach to examine how routes and paths -- the spatial networks that connect settlements -- evolve in response to patterns of environmental variability. Rather than leaving the carrying capacity of our population of settlements to remain fixed, we allow it to vary over space and in time. We examine how different patterns of spatio-temporal change lead to different settlement patterns and spatial network. We use a simple computatational modeling approach to facilitate a broad range of exploration, while maintaining interpretive clarity. We expect that different patterns, such as fixed oscillations, to lead to different stable patterns of spatial networks, whose dynamical behavior feeds back to influence settlement dynamics. In this way we seek to model the potential for "inertia" in settlement patterns, complicating the relationship between environmental forcing and social dynamics. Finally we allow for bidirectional feedbacks between human populations and the environment, exploring the potential for nonlinear social-ecological dynamics.
-
-We distinguish here between "routes" and "paths". The former is a social construct, the latter are physical.
-
-
-
-  Sharing and exchange are critical for maintaining population in response to interannual climate variability, although this short term stability can come at the cost of long term environmental degradation [@Janssen2010]. More restricted sharing rules can be effective [@Hegmon1996], but can also be sensitive to the asymmetric accrual of debts if one party's food supply is more volatile than anothers' [@Crabtree2015].
- 
-Social infrastructure interacts directly with physical infrastructure because social networks must map onto spatial networks. Metabolic costs, such as the energy expended producing and transporting food over space where transportation infrastructure is sparse, provide constraints on energy flows in exchange systems [@Drennan1984]. In any particular case, the balance between these costs and the metabolic benefits of social interaction influences whether resources are moved in bulk to populations in need, or whether those populations move themselves to the available resources. The topology of spatial networks also constrains who can interact with whom, introducing bottlenecks and other structural flow constraints [@Barthelemy2011SpatialNetworks]. Improvements to transportation infrastructure, such as roads and trails, decrease the effective distance between different settlements; failure to maintain these transportation networks increases the effective distance [@McCall1985TheAfrica].
+Self organization ... settlemetn patterns represent spontaneous order in response to spatial variability. positive feedbacks
 
 Regional scale patterns of spatial interaction arise from the decisions of heterogeneous agents interacting with imperfect and incomplete information. They make decisions based on the perceived costs and benefits of interaction, as far as they are able to distinguish them. It is crucial to estimate distribution of each person's subjective predictions about the costs and benefits of social interaction, conditional on the information available to them about each potential destination.
 
-Self organization ... settlemetn patterns represent spontaneous order in response to spatial variability. positive feedbacks
-anderies and hegmon 2011
+Metabolic costs, such as the energy expended producing and transporting food over space where transportation infrastructure is sparse, provide constraints on energy flows in exchange systems [@Drennan1984]. In any particular case, the balance between these costs and the metabolic benefits of social interaction influences whether resources are moved in bulk to populations in need, or whether those populations move themselves to the available resources. 
 
-cite crema 2015 for vraying caryying capcity
+Sharing and exchange are critical for maintaining population in response to interannual climate variability, although this short term stability can come at the cost of long term environmental degradation [@Janssen2010]. More restricted sharing rules can be effective [@Hegmon1996], but can also be sensitive to the asymmetric accrual of debts if one party's food supply is more volatile than anothers' [@Crabtree2015]. Environemntal context of exchange important [@Freemanetaal2014].
 
-Lotka-Volterra equations are used in ecology to model energy flows in a food web. More generally, these models can represent energy flows in any social-ecological system, such as an agricultural settlement extracting food from the surrounding hinterland.
+Specifically build on @Anderies2011 which explored the interaction of migration and resource heterogeneity. They used a 3 patch model to assess the role of migration and climate shocks in relation to ecological dynamics and cultural attitudes. This study presents a spatially rich extension that uses spatial interaction model to capture trade and migration flows within a structured population of settlements.
+
+The network matters. The topology of spatial networks also constrains who can interact with whom, introducing bottlenecks and other structural flow constraints [@Barthelemy2011SpatialNetworks,@qubbaj20111]. Improvements to transportation infrastructure, such as roads and trails, decrease the effective distance between different settlements; failure to maintain these transportation networks increases the effective distance [@McCall1985TheAfrica].
+  
+Archaeology is embracing the form of constrained spatial interaction modeling developed by Wilson. These Boltzmann-Lotka-Volterra (BLV) style models use maximum entropy spatial interaction models to allocate flows between a spatially structured metapopulation, and Lotka-Volterra style consumer-resource equations to govern the growth of the populations. Lotka-Volterra equations are used in ecology to model energy flows in a food web. More generally, these models can represent energy flows in any social-ecological system, such as an agricultural settlement consuming resources from its hinterland.
+
+These equations are able to capture the dynamic feedbacks between settlements and the networks connecting them. Recent work in archaeology has expanded these models to allow the networks to further evolve, as routes that are more often used to connect important sites become themselves important, which in turn shapes the growth of settlements close to those routes. Past work has shown how stable routes and sets of routes can develop in mountainous topography, where physical constraints on movement are able to constrain the possible routes between settlements. 
+
+Here, I extend this approach to examine how settlement systems evolve in response to patterns of environmental variability. Rather than leaving the carrying capacity of our population of settlements to remain fixed, we allow it to vary over space and in time. We examine how different patterns of spatio-temporal change lead to different settlement patterns and spatial network. We use a simple computatational modeling approach to facilitate a broad range of exploration, while maintaining interpretive clarity. We expect that different patterns, such as fixed oscillations, to lead to different stable patterns of spatial networks, whose dynamical behavior feeds back to influence settlement dynamics. In this way we seek to model the potential for "inertia" in settlement patterns, complicating the relationship between environmental forcing and social dynamics. Finally we allow for bidirectional feedbacks between human populations and the environment, exploring the potential for nonlinear social-ecological dynamics.
 
 # Methods
 
-We explore a simple model of agricultural settlements and their hinterlands. The base unit is a settlement, representing any urban or semi-urban population in an agrarian society that consumes food from its hinterland to support a population of non-farmers. The population engaging directly in food production is assumed to be external to the model, and instead it focuses on the population of merchants, craftspeople, and elites who rely on agricultural surplus produced in the hinterland [@Turchin2011]. The core dynamics of this urban population are represented as
+We explore a simple model of human settlements and their agricultural hinterlands. The base unit is a settlement, representing any urban or semi-urban population in an agrarian society that consumes food from its hinterland to support a population of non-farmers. The population engaging directly in food production is assumed to be external to the model, and instead it focuses on the population of merchants, craftspeople, and elites who rely on agricultural surplus produced in the hinterland [@Turchin2011]. The core dynamics of this urban population are represented as
 
 $$
 \dot{N} = rN,
@@ -91,27 +84,66 @@ r =
 $$
 where $X$ is the amount of available resource surplus, $\epsilon$ is a parameter that controls the rate at which the surplus increases or decreases the population, and $r_{\mathit{max}}$ is the maximum growth rate. This equation states that the population grows or shrinks in proportion to its consumption of resources, but it cannot grow faster a biological maximum rate. For simplicity, assume that $X$ is scaled to units of $N$ so that one unit of resource is sufficient to maintain one unit of population. The resulting process is a hybrid of exponential and logistic growth, with the population growing quickly when consumption is far above population, and more gradually when it is close (Figure \@ref(fig:growth-model)). $X$ acts as a carrying capacity, but unlike with the population's approach to this limit can be much less gradual than in logistic growth, but not as rapid as exponential growth. The population saturation occurs over a period of two to three generations.
 
+```{r}
+grow <- function(net, epsilon = .0001, rmax = .02){
+  net %N>%
+     mutate(population_new = population + population * pmin(epsilon * (harvest - population), rmax) - migrant_production + immigrants,
+           population_new = if_else(population_new > .0001, population_new, .0001),
+           eq = if_else(abs((population_new - population) / population) > 0.001, 0, eq + 1),
+           population = population_new)
+}
+```
+
+
 ```{r fig.cap='Simulations from the growth model, compared with exponential and logistic growth, for two levels of $X$. When $N$ is near $X$, it resembles logistic growth. When $N$ is small relative to $X$, the population grows exponentially.'}
-tibble(X = c(250, 500)) %>%
-  mutate(exponential = map(X, function(x) accumulate(1:599, ~ pmin(. + . * .02, x), .init = 10)),
-         hybrid = map(X, function(x) accumulate(1:599, ~ . + pmin(.0001 * (x - .), .02) * .,.init = 10)),
-        logistic = map(X, function(x) accumulate(1:599, ~ . + .02 * . * (1 - . / x),.init = 10))) %>%
-    gather(type, N, exponential:logistic) %>%
+
+x_text <- tibble(x = c(350, 400), 
+       y = c(100,350), 
+       X = c(250, 500),
+       text = paste('X = ', X))
+
+p1 <- tibble(X = c(250, 500)) %>%
+  mutate(exponential = map(X, function(x) accumulate(1:499, ~ pmin(. + . * .02, x), .init = 10)),
+         hybrid = map(X, function(x) accumulate(1:499, ~ . + pmin(.0001 * (x - .), .02) * .,.init = 10)),
+        logistic = map(X, function(x) accumulate(1:499, ~ . + .02 * . * (1 - . / x),.init = 10))) %>%
+  gather(type, N, exponential:logistic) %>%
   unnest(cols = c(N)) %>%
-  mutate(time = rep(1:600, 6)) %>%
-  ggplot(aes(time, N, group = type)) +
-  geom_line(aes(color = type), size = 4) +
-  scale_color_viridis_d(direction = -1) +
+  mutate(time = rep(1:500, 6)) %>%
+  ggplot(aes(time, N)) +
+  geom_line(aes(color = type, group = type), size = 1.2) +
+  scale_color_viridis_d(direction = -1, name = 'Growth function') +
   facet_wrap(~X) +
-  coord_equal() +
-  theme_minimal()
+  geom_text(data = x_text, aes(x = x, y = y, label = text)) +
+  labs(x = 'Year', y = 'Population') +
+  theme_classic() +
+  theme(strip.background = element_blank(),
+  strip.text.x = element_blank())
 
 
-growth <- function(n, x) pmin(.0001 * (x - n), .02) * n
+p2 <- expand_grid(distance = 0:100,
+       beta =  c(1, 5, 10, 15, 20)) %>%
+  mutate(deterrence = exp(-distance / beta)) %>%
+  mutate(beta = as.ordered(beta)) %>%
+    ggplot(aes(distance, deterrence, color = beta, group = beta)) +
+  geom_line(size = 1.2) +
+  scale_color_viridis_d(name = expression(italic(beta))) +
+  labs(x = 'Distance (km)', y = 'Interaction strength') +
+  theme_classic()
 
-plot(growth(1:600, 500))
-# plot all x and n, or rescale
-expand_grid()
+expand_grid(nu = (2:8)/100,
+            welfare = (1:100) / 100) %>%
+  mutate(production = .5 * plogis(welfare, scale = nu, location = .75)) %>%
+  ggplot(aes(welfare, production, color = as.ordered(nu))) +
+  geom_line(size = 1.2) +
+  geom_hline(yintercept = .5) +
+  theme_classic()
+
+
+
+
+plot(.5 * plogis(1:100/100,scale = .05, location = .7))
+
+p1 / p2 + plot_annotation(tag_levels = 'A')
 ```
 
 ## Spatial Interaction
@@ -144,16 +176,29 @@ settlements <- hinterlands %>%
   st_centroid %>%
   st_distance %>%
   round(2) %>%
-  replace(. == 0, phi) %>%
+  replace(. == 0, 999) %>%
   as_tbl_graph %>%
-  mutate(population = pop_start,
+  mutate(id = 1:n(),
+         population = pop_start,
          food = food_start,
          x = pts[,1], 
          y = pts[,2],
          eq = 0) %E>%
   rename(distance = weight) %>%
-  mutate(trade_flow = 0,
-         migrant_flow = 0)
+  mutate(distance = if_else(distance == 999, 0, distance),
+         trade_flow = 0,
+         migrant_flow = 0) 
+
+prune <- function(net, beta, tolerance = 0.001){
+  net %E>%
+    filter(distance < -log(tolerance) * beta)
+}
+  
+
+# the larger your domain grows the more potential connections there will be, which can
+# increase computational costs significantly. We can fix this by filtering out edges defined
+# at a certain threshold. if we're using the exponetial beta parameterization, we can truncate using the following command, where the term in the log is the minimum distance effect we want to capture. We'll set it to .005, which if we assume food is 200 gives us 1. so at a maximum parameterization of beta = 20, truncating the network at this distance serves to elimitate flows that will be lses than .5% or 1 food.
+
 
 paths <- settlements %E>% 
   filter(near(distance, sqrt(3) * radius, tol = .1)) %>%
@@ -185,53 +230,72 @@ $$
 
 where $O_i$ is the total outflows from site $i$, $W$ represents a site's attractiveness to site $i$, and $c$ is some function of distance. $\alpha$ and $\beta$ are parameters derived from the Lagrange multipliers; $\beta$ is particularly relevant here as it determines the impact of distance on flow intensity, and can be varied to represent the different costs of moving food versus people across an exchange network. Here, a site's attractiveness $W$ is its \textit{per capita} food supply, $\frac{N}{X}$. This differs from the standard formulation used in geography and urban studies, where a settlement's attractiveness is only a function of its size [@Evans2011InteractionsModels]. Linking interaction intensity to food supply in this way allows the model to incorporate the influence of climate variability directly.
 
+As a shorthand call beta1 "transport" ease and beta2 "travel" ease
 
 ```{r}
-interact <- function(net, fluctuation = 1, alpha_t = 1, alpha_m = 1, beta1 = 4, beta2 = 10, nu = 0.05, epsilon = .0001, rmax = .02){
-  new_net <- net %E>%
-    # trade
-      mutate(trade_utility = .N()$population[to] ^ alpha_t * exp(-distance / beta1))  %N>%
+trade <- function(net, alpha, beta, phi = radius / 2, fluctuation){
+  net %E>%
+   mutate(trade_utility = .N()$population[to] ^ alpha * exp(-if_else(distance > 0, distance, phi) / beta))  %N>%
     mutate(trade_balance = centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE),
-           trade_production = food * (1 + pattern * fluctuation)) %E>%
+           trade_production = food * (1 + anomaly * fluctuation)) %E>%
     mutate(trade_flow = .N()$trade_production[from] * trade_utility / .N()$trade_balance[from]) %N>% 
-    mutate(harvest = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %E>%
-    # migration
-    mutate(migrant_utility = (.N()$harvest[to] / .N()$population[to]) ^ alpha_m * exp(-distance / beta2)) %N>%
+    mutate(harvest = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE))
+}
+```
+
+Not only do settlements interact indirectly with one another by harvesting the same hinterland, but also directly by exchanging population through migration flows. Each model year, a fixed proportion of a settlement's population leaves each city. These migrants select their destination based on the distance to potential migration destination and the relative per capita resource extraction rate of each settlement.
+
+The migration flows are modeled similarly to the trade flows, using a production-constrained spatial interaction model.
+murilo et al 2017 and anderies and hegmon 20xx
+
+$$
+  M = \frac{0.5}{1 + e^{-(x - \mu) / 
+\nu} }
+$$
+
+```{r}
+migrate <- function(net, alpha1, alpha2, beta, nu = 0.05){
+  net %E>%
+    mutate(migrant_utility =.N()$population[to] ^ alpha1 * (.N()$harvest[to] / .N()$population[to]) ^ alpha2 * exp(-distance / beta)) %N>%
     mutate(migrant_balance = centrality_degree(weights = migrant_utility, mode = 'out', loops = TRUE),
-           migrant_production = nu * population) %E>% # * (population / harvest) ^ 2) %E>%  # explore this
+           migrant_production = nu * population) %E>% 
     mutate(migrant_flow = .N()$migrant_production[from] * migrant_utility / .N()$migrant_balance[from])  %N>%
-    mutate(immigrants = centrality_degree(weights = migrant_flow, mode = 'in', loops = TRUE)) %>%
-    # population growth
-    mutate(population_new = population + population * pmin(epsilon * (harvest - population ^ .85), rmax) - migrant_production + immigrants,
-           population_new = if_else(population_new > .0001, population_new, .0001),
-           is_stable = abs((population_new - population) / population) < 0.0001,
-           stable = if_else(is_stable == FALSE, 0, stable + 1),
-           population = population_new) %>%
-    select(-c(trade_balance:trade_production, migrant_balance:migrant_production, population_new, is_stable)) %E>%
+    mutate(immigrants = centrality_degree(weights = migrant_flow, mode = 'in', loops = TRUE))
+}
+```
+
+The entire system is composed of complicated nonlinear equations, as the growth and decline of settements can potentialy depend on al other settlements. Refer to @Anderies2011 for analytical exploration of a similar model. Now we use simulation to better understand the behavior of this model in different enviromental contexts.
+
+```{r}
+interact <- function(net, fluctuation = 1, alpha1 = 1.15, alpha2 = 1, beta1 = 5, beta2 = 10){
+  new_net <- net %E>%
+    trade(alpha = alpha1, beta = beta1, fluctuation = fluctuation) %>%
+    migrate(alpha1 = alpha1, alpha2 = alpha2, beta = beta2) %>%
+    grow %>%
+    select(-c(trade_balance:trade_production, migrant_balance:migrant_production, population_new)) %E>%
     select(-c(trade_utility, migrant_utility)) %>%
     activate('nodes')
 
-   if(sum(pull(new_net, stable) >= 100) < n){
+   if(sum(pull(new_net, eq) >= 100) < n){
      return(new_net)
    } else return(done(new_net))
 }
 ```
 
 
-Not only do settlements interact indirectly with one another by harvesting the same hinterland, but also directly by exchanging population through migration flows. Each model year, a fixed proportion of a settlement's population leaves each city. These migrants select their destination based on the distance to potential migration destination and the relative per capita resource extraction rate of each settlement.
-
-The migration flows are modeled similarly to the trade flows, using a production-constrained spatial interaction model.
-
-
-
 ## Environmental Variability
 
 The model does not account for the dynamics of agricultural production in the hinterland directly, and instead assuming a fixed baseline surplus food production each year that varies due to exogenous environmental factors (e.g. rainfall). By systematically varying the spatial and temporal patterns of surplus production, the researcher can investigate how the settlement system self organizes in response to those patterns of environmental variability.
 
+The climate anomalyis the spatial pattern.
+
+
+Rainfall varies smoothly, but it is important that crop yields do not vary linearly with rainfall. Yield should be a declining function of yield, such that given normal variability the risk of crop failure is higher than if there hadnt been any.
+Simple power function of rainfall is crop productionfunction
 
 ```{r}
 make_grf <- function(x, y, scale){
-  mod <- RMexp(var = (food_start / 2)^2, scale = scale) + 
+  mod <- RMexp(var = (food_start / 3)^2, scale = scale) + 
     RMnugget(var = .5) + 
     RMtrend(mean = food_start)
    RFsimulate(mod, x = x, y = y)$variable1
@@ -293,6 +357,18 @@ p3 <- env %>%
 p3 / (p1 + p2) + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(2, 1))
 ```
 
+
+```{r}
+yield <- function(rainfall){
+  1 * pmax(0, 0.51 * log(rainfall) + 1.03)  # annual rainfall impact on yields
+}
+
+0.51 * log((rainfall)) + 1.03
+plot((0:200)/100, yield((0:200)/100), ylim = c(0, 1.5))
+
+plot((0:200)/100, 1.03 * ((0:200)/100)^.5  + 1,ylim = c(0, 1.5))
+```
+
 ```{r}
 nystuen_dacey <- function(net, mode = 'trade'){
   net %E>%
@@ -316,87 +392,41 @@ knitr::knit_exit()
 
 # Results
 
-Maybe try running with all environmentalattreativeness and no population feedback, but instead with the growing roads?
+First I explore baseline sensitivity of the model to key tuning parameters. interaction parameters $\beta_1$ and $beta_2$ governing the distance deterrence for trade and migration, respectively.
 
-or disaggregate so to attractivenesses are carrying capacity and size relative to carrying capacity?
+We only assume that all $\alpha >= 1$, that is there are positive returns to scale in attractiveness, and $\beta_1 \leq \beta_2$ because moving food over the landscape should be more difficult than moving people. 
 
-
-
-
-The outer ring network reminds us of central place theory (Openshaw and Veneris 2003)
-
-
-So generally we see more settlements with increasing beta. With increasing alpha we get a more defined heirarchy of site sizes.
-
-Past a beta of .4 or whatever, the patterns don't change. this is because at this point, the distance decay function attentuates at or below the baseline 10km distance between settlements. Important to not here that the interperation of the value of beta depends on the characteristic length scale.
-```{r}
+```{r, eval=FALSE}
 plan(multisession)
 
-beta_sweep <- expand_grid(beta1 = c(0, 5, 10, 15, 20),
-                           beta2 = c(0, 5, 10, 15, 20)) %>%
-  mutate(sim = future_map2(beta1, beta2, function(x, y) reduce(1:2000, ~interact(., beta1 = x, beta2 = y), .init = settlements), .progress = TRUE))
-
-1/20
+param_sweep <- expand_grid(beta1 = c(5, 10, 15, 20),
+                           beta2 = c(5, 10, 15, 20),
+                          alpha1 = c(1, 1.05, 1.15),
+                          alpha2 = c(1, 1.05, 1.15),
+                          alpha3 = c(0, 1),
+                          gamma = c(.85, 1)) %>%
+  filter(beta1 <= beta2) %>%
+  mutate(sim = future_pmap(list(beta1, beta2, alpha1, alpha2, alpha3, gamma), function(a,b,c,d,e,f) reduce(1:2000, ~interact(., beta1 = a, beta2 = b, alpha1 = c, alpha2 = d, alpha3 = e, gamma = f), .init = settlements %N>% mutate(anomaly = 0)), .progress = TRUE))
 
 saveRDS(param_sweep, 'param_sweep')
-param_sweep <- readRDS('param_sweep')
+```
 
-test <- param_sweep %>%
+```{r}
+param_sweep <- readRDS('param_sweep') %>%
   mutate(dat = map(sim, as_tibble, 'nodes'),
         nd_trade = map(sim, nystuen_dacey),
          nd_migrants = map(sim, nystuen_dacey, mode = 'migrants'))
 ```
 
+Rank size distribution. Increasing $\beta_2$ increases the convexity of the rank size distribution. Increasing $\beta_1$ decreases it
 
 ```{r}
-test %>%
-    select(beta_t, beta_m, nd_trade) %>%
-    mutate(nd = map(nd_trade, as_tibble, 'edges')) %>%
-    unnest(nd) %>%
-  select(beta_t, beta_m, from, to) %>%
-  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
-  ggraph(x = x, y = y) +
-  geom_edge_link(alpha = .5) +
- # geom_node_point(aes(size = population)) +
-  facet_edges(beta_t ~ beta_m, nrow = 5) +
-  coord_equal() +
-  theme_void()
-```
-
-```{r}
-test %>%
-    select(beta_t, beta_m, nd_migrants) %>%
-    mutate(nd = map(nd_migrants, as_tibble, 'edges')) %>%
-    unnest(nd) %>%
-  select(beta_t, beta_m, from, to) %>%
-  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
-  ggraph(x = x, y = y) +
-  geom_edge_link(alpha = .5) +
- # geom_node_point(aes(size = population)) +
-  facet_edges(beta_t ~ beta_m, nrow = 5) +
-  coord_equal() +
-  theme_void()
-```
-
-"jumps" in the parameter space (clarke and wilson 1983 or 1985, regional science). basically the relationships between alpha and beta are consistent for this
-
-```{r}
-test %>%
-  select(beta_t, beta_m, dat) %>%
+param_sweep %>%
+  select(beta1:gamma, dat) %>%
   unnest(col = c(dat)) %>%
-  ggplot(aes(log(population))) +
-  geom_density(fill = 'black') +
-  facet_grid(beta_t ~ beta_m) +
-  theme_classic()
-```
-Explor the rank size distirbution
-```{r}
-test %>%
-  as_tibble %>%
-      select(beta_t, beta_m, dat) %>%
-  unnest(col = c(dat)) %>%
-  filter(population >= 1) %>%
-  group_by(beta_t, beta_m) %>%
+  select(beta1:gamma, population, x, y, harvest, immigrants) %>%
+  filter(alpha1 == 1, alpha2 == 1, alpha3 == 0, gamma == 1) %>%
+  group_by(beta1, beta2) %>%
   arrange(-population) %>%
   mutate(rank = 1:n()) %>%
   ggplot(aes(rank, population)) +
@@ -404,313 +434,404 @@ test %>%
   geom_point() +
   scale_x_log10() +
   scale_y_log10() +
-  facet_grid(beta_t ~ beta_m, scales = 'free_y') +
+  facet_grid(rows = vars(beta1), cols = vars(beta2), scales = 'free_y') +
   theme_classic()
 ```
 
+The general pattern is a spatial doubling bifurcation
+With baseline values of $\alpha_1 = \alpha_2 = 1$, $\alpha_3 = 0$ and $\gamma = 1$ (that is, no scaling behavior or hunger based movement). Increasing $\beta_1$, allowing food to be moved further distances, decreases the number of inhabitet settlements at equilibrium and increases the size of these centers (though not as much as migration). The settlements also move closer to the center of the domain, as that supplies tha maximum access to resources. Holding $\beta_1$ constant and varying $\beta_2$ allowing migrants to move further than food. The result is a pattern of concentrric rings at low values of beta1. When it is difficult to move food over space, migration acts in lieu of food tranpsort by increasing the size of the terminal centers (allowing population to move to populated zones). But at beta2 = 15 there is a switch, where now the center is filled with multiple settlements of similar size in a hexagon pattern. The number of settlemetns in this central zone increases with increasing migration. IT seems that this might be a rsult of the size and shape of the spatial domain, as at long distance interaction the size and shape of the domain more strongly constrains the possible configurations. These inner zones decrease at increasing beta1, suggesting that what's happing is at low values of beta1 settlements must extact from their immediate area. Settlements at the edge get inital advangtages because they have fewer nearby cities competeing with them for resources. At low beta2, this doesn't matter as much, but at high beta2 it sets of a feedback because population migrates to the sites with initial advantages. When beta1 is higher, beta2 doesn't neceesaryily change the patterns that much, just serves to concentrate more poeple in fewer core settlemetns that are closer together. At the highest values of beta and beat2, the hexagonal core returns, if smaller than in the low beta1 case. The key feature to my mind is the bifurcation between $\beta_1$ at 5 and 10. This is the showing difference above and below the distance of the nearest cell neighbor given the cell resoltion (nearest distance is approximately 8km). If transportation technology allows food to move more easily between scales, that process dominates and the system organizes around the territorial reach of each settlements, and the resulting feedbacks with food flows and size predominate. When beta1 is low/transport tech is low, it is harder to move food between terirtories and migration predominates in shaping settlement patterns.Likewsie, there isn't much of adiffernce between the 10 and 15 threshold because that's still between settlements (the distances are 8 and 17)
+
+So that middle zone thing only happens when alpha 3 is zero. That is it is a result of the population seeking behavior. When we allow people to avoid locations near carrying capacity, the system is allowed to balance out better.
+
+Although these are edge effects, this does have important implications for for geographically bounded systems. Variations in transport capacity only matter up to the constraint of maximum travelable distance. decreasing transport and travel costs ()
 ```{r}
-test %>%
-  select(beta_t, beta_m, dat) %>%
+param_sweep %>%
+  select(beta1:gamma, dat) %>%
   unnest(col = c(dat)) %>%
+  select(beta1:gamma, population, x, y, harvest, immigrants) %>%
+  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1) %>%
+  group_by(beta1, beta2)%>%
+  #filter(beta1 == 5) %>%
   arrange(population) %>%
-  filter(population > 1) %>%
   ggplot(aes(x, y)) +
-  geom_point(aes(color = log(population)), size = 1.7)+
+  geom_point(aes(size = population, color = population))+
+  scale_size_area() +
+  scale_color_viridis_c(guide = 'legend') +
+  coord_equal() +
+  theme_void() +
+  facet_grid(rows = vars(beta1), cols = vars(beta2))
+```
+Introducing scaleing parameters to the population size doesn't change the basic interaction between the betas. It does greatly increase the population size. Incorporating alpha3 does change the settlemnt patterns somewhat.. But again the basic relationship between beta1 and beta2 doesn't change
+
+the center zone behavior arises if we set alpha1=alpha2, and turn on alpha3. that is all the alphas are the same, then the population center hexagon arises much faster, at lower values of beta2, and is much larger. It goes away if we turn on scaling for gamma. This suggests the case where movement is easy, but there are few advantages to living in larger sites, and what adantages do arise are equalized by the alpha3 bejavior
+```{r}
+param_sweep %>%
+  select(beta1:gamma, dat) %>%
+  unnest(col = c(dat)) %>%
+  select(beta1:gamma, population, x, y, harvest, immigrants) %>%
+  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1) %>%
+  group_by(beta1, beta2)%>%
+  arrange(population) %>%
+  ggplot(aes(x, y)) +
+  geom_point(aes(size = (population), color = (population)))+
+  scale_size_area() +
   scale_color_viridis_c() +
   coord_equal() +
   theme_void() +
-  facet_grid(beta_t ~ beta_m)
-    
+  facet_grid(rows = vars(beta1), cols = vars(beta2))
+```
+Constaining beta1 to 5 and beta2 to 10, then exploring alphas. All else being equal, we'd assume $\alpha_1 = \alpha_2$ since they both relate the the scaling with population size, and the differences in the importance of population size between travel and transport attractiveness would be introduced by the prefactor (which get's cancelled here given the normalization). Nevertheless we explore different combinations of alphas. Generally, increasing eigher alpha increases the concentration of popualtions in fewer centers. As before, the settlemetns near the edge grow higherst, because there is less competition for access to resources. Turning on alpha 3, so that people avoid crowded locations, considerably icnreases the complexity of the system. This removes the apparent similarity between the alphas, with more nonlinear responses
 
-hex %>%
-  mutate(x = pts[,1],
-         y = pts[,2]) %>%
-  left_join(test %>%
-  select(beta_t, beta_m, dat) %>%
-  unnest(col = c(dat)), .) %>%
-  ggplot() +
-  geom_sf(aes(fill = log(population)), color = 'white', lwd = .1) +
-  scale_fill_viridis_c() +
-  coord_sf(datum = NA) +
+```{r}
+param_sweep %>%
+  select(beta1:gamma, dat) %>%
+  unnest(col = c(dat)) %>%
+  select(beta1:gamma, population, x, y, harvest, immigrants) %>%
+  filter(beta1 == 5, beta2 == 10, alpha3 == 1, gamma == 1) %>%
+  group_by(alpha1, alpha2)%>%
+  arrange(population) %>%
+  ggplot(aes(x, y)) +
+  geom_point(aes(size = population, color = population))+
+  scale_size_area() +
+  scale_color_viridis_c(guide = 'legend') +
+  coord_equal() +
   theme_void() +
-  facet_grid(beta_t ~ beta_m)
-
-
-hex %>%
-  mutate(x = pts[,1],
-         y = pts[,2]) %>%
-  left_join(test %>%
-  select(beta_t, beta_m, dat) %>%
-  unnest(col = c(dat)), .) %>%
-  filter(population >= 1) %>%
-  ggplot() +
-  geom_sf(aes(fill = log(population))) +
-  scale_fill_viridis_c() +
-  coord_sf(datum = NA) +
-  theme_void() +
-  facet_grid(beta_t ~ beta_m)
-
-  ggsave('hex2.png', width = 12, height = 8)
-  
+  facet_grid(rows = vars(alpha1), cols = vars(alpha2))
 ```
 
-How do the stable patterns reflect th underlying functions?
-For exponential, looks like we could reasonably go below 0.05 and still get some interesting stuff
-anything above .45 is too restrictive
+let's analyze the patterns statistically. we calculate the total population of each simulation, and the relative shannon entropy of the population distribution, and index of dispersion. Values of 0 indicatea fully concentrated in a single point systen, 1 is as dispersed as possible. From this we see gamma greatly increases the max population, enough so that its hard to see. with gamma = .85, we see a roughly linear decline in entropy (ie increasing concentration with increasing settlement size). No such relationship with gamma = 1. Bsaically it seems that gamma is so powerful it swamps out other considerations.
 ```{r}
-beta_check <- expand_grid(distance = 0:200,
-       beta = seq(0, 1, by = 0.001 )) %>%
-  mutate(exponential = exp(-beta * distance),
-        logarithmic = distance ^ -beta) %>%
-  gather(type, value, exponential:logarithmic)
+param_sweep %>%
+  select(beta1:gamma, dat) %>%
+  mutate(population = map_dbl(dat, ~sum(.$population)),
+         prob_vect = map2(dat, population, ~ (.x$population) / .y),
+         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300))) %>%
+  select(beta1:gamma, population, entropy) %>%
+  ggplot(aes(population, entropy)) + geom_point(aes(color = gamma)) + facet_wrap(~gamma, scales = 'free_x')
 ```
-
+So looking at the parametr combinations that lead to high poplation or high concentration ... low beta1 and high beta2 have the highest population, more sensitive to beta1, and alphas set to 0, and alpha 2 more important to be low than otherwise. This is what we saw in the graphs with the large central areas, which reflect low transport costs and low returns to scale. For the entropy case, low beta1 means higher etnropy (ie more dispersion). Beta2 maetters less, and again with low or no scaling. having alpha3 in the mix also increases dispersion, all as we'd expect.
 ```{r}
-beta_check %>% filter(distance == 10, type == 'logarithmic')
+param_sweep %>%
+  select(beta1:gamma, dat) %>%
+  mutate(population = map_dbl(dat, ~sum(.$population)),
+         prob_vect = map2(dat, population, ~ (.x$population) / .y),
+         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300))) %>%
+  select(beta1:gamma, population, entropy) %>%
+  filter(gamma == 1) %>%
+  arrange(-entropy)
 ```
 
-Constrain the possible parameter space for both models. For exponential, if beta is too high then food won't move anywhere. so wehre is the threshold? maybe at least 10%. Its .23.
-
-So exponential beta should be .01 to .25
-
-logarithmic beta should be between .4  and 1
-
+intrestingly, there seems to be very little variability around beta1 is 15, that's when we get to 3 city attractor. beta 2 increasing slightly decrases entropy, but not as strongly as beta1. having alpha3 in the mix slightly increases the entropy, but the boxplots are still within the range of one another as we might expect
 ```{r}
-beta_check %>%
-  filter((distance == 10 | distance == 200), near(value, .1, tol = .01)) %>%
-  group_by(distance, type) %>%
-  summarise(beta = mean(beta)) %>%
-  arrange(type, distance)
+param_sweep %>%
+  select(beta1:gamma, dat) %>%
+  mutate(population = map_dbl(dat, ~sum(.$population)),
+         prob_vect = map2(dat, population, ~ (.x$population) / .y),
+         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300))) %>%
+  select(beta1:gamma, population, entropy) %>%
+  filter(gamma == 1) %>%
+  ggplot(aes(beta1, entropy, group = beta1)) + geom_boxplot()
 
-200^-.40
+param_sweep %>%
+  select(beta1:gamma, dat) %>%
+  mutate(population = map_dbl(dat, ~sum(.$population)),
+         prob_vect = map2(dat, population, ~ (.x$population) / .y),
+         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300))) %>%
+  select(beta1:gamma, population, entropy) %>%
+  ggplot(aes(gamma, entropy, group = gamma)) + geom_boxplot()
 ```
 
-let's pick 5 representatives from each?
+So what does this all leave us with. Beta1 governs the spacing of the centers, beta2 and alphas more impact the population distirbution. Alphas specifically increase the heirarchies
+
+So generally we see more settlements with decreasing beta. With increasing alpha we get a more defined heirarchy of site sizes.
+
+Past a beta of .4 or whatever, the patterns don't change. this is because at this point, the distance decay function attentuates at or below the baseline 10km distance between settlements. Important to not here that the interperation of the value of beta depends on the characteristic length scale.
 
 ```{r}
-
-beta_check %>%
-   filter((type == 'exponential' & between(beta, .01, .25)) | (type == 'logarithmic' & between(beta, .4, 1))) %>% 
-  filter(beta %% .01 == 0) %>%
-  ggplot(aes(distance, value, color = beta, group = beta)) +
-  geom_line(size = 1.2) +
-  geom_vline(xintercept = c(5, 10), color = 'red', linetype = 2) +
-  facet_wrap(~type) +
-  scale_color_viridis_c() +
-  theme_classic()
-
-beta_check %>%
-   filter((type == 'exponential' & beta %in% c(0, .01, .05, .1, .25)) | (type == 'logarithmic' & beta %in% c(0, .2, .4, .8, 1))) %>%
-  ggplot(aes(distance, value, color = beta, group = beta)) +
-  geom_line(size = 1.2) +
-  geom_vline(xintercept = c(5, 10), color = 'red', linetype = 2) +
-  facet_wrap(~type, nrow = 2) +
-  scale_color_viridis_c() +
-  theme_classic()
-
-beta_check %>%
-  filter(type == 'exponential') %>%
-  filter(beta < .2 & beta >= 0 & beta %%.01 == 0) %>%
-    ggplot(aes(distance, value, color = beta, group = beta)) +
-  geom_line(size = 1.2) +
-  geom_vline(xintercept = c(5, 10), color = 'red', linetype = 2) +
-  scale_color_viridis_c() +
-  theme_classic()
-
-plot((1:30) ^ -.8)
+param_sweep %>%
+    select(beta1, beta2, nd_trade) %>%
+    mutate(nd = map(nd_trade, as_tibble, 'edges')) %>%
+    unnest(nd) %>%
+  select(beta1, beta2, from, to) %>%
+  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(alpha = .5) +
+  facet_edges(beta1 ~ beta2, ncol= 5) +
+  coord_equal() +
+  theme_void()
 ```
-
-
-run a clustering algorithm on the outputs to determine ?regions
+We can agian confrim the genral patterns above by looking at the nystuen dacey graphs. Confirming that the mass of same sized sites reflects that they have no nystuen dacey graph for trade, ie they're all competing for the same land and no clear winner gets the flows. We do get migrants out from the core to the edge sites, hence the hexagonal pattern of the core zone. these patterns arent particularly sensitive to the alphas.
 ```{r}
-test3 <- param_sweep %>%
-  mutate(simsim = map(sim, ~filter(., population >= 1)),
-         sim = map(sim, ~mutate(., group = group_components())),
-         dat = map(sim, as_tibble, 'nodes')) %>%
-  select(-sim) %>%
-  unnest(cols = c(dat))
+#trade
+param_sweep %>%
+  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1)  %>%
+    mutate(nd = map(nd_trade, as_tibble, 'edges')) %>%
+    select(beta1:gamma, nd) %>%
+    unnest(nd) %>%
+  select(beta1, beta2, from, to) %>%
+  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(alpha = .5) +
+  facet_edges(beta1 ~ beta2) +
+  coord_equal() +
+  theme_void()
 
-
-param_sweep[[120,3]] %>%
-  filter(population >= 1) %>%
-  mutate(group = group_components())
-
-test3 %>%
-  filter(beta > 0) %>%
-  group_by(alpha, beta, group) %>%
-  summarise(n_cells = n()) %>%
-  ggplot(aes(n_cells)) +
-  geom_histogram() +
-  facet_grid(alpha ~ beta)
+#migrants
+param_sweep %>%
+  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1)  %>%
+    mutate(nd = map(nd_migrants, as_tibble, 'edges')) %>%
+    select(beta1:gamma, nd) %>%
+    unnest(nd) %>%
+  select(beta1, beta2, from, to) %>%
+  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(alpha = .5) +
+  facet_edges(beta1 ~ beta2) +
+  coord_equal() +
+  theme_void()
 ```
+
+But remember, in the case of the migration flows, the nd graph might be misleading because you can have significant flows of migration between the large cities, even if the nystuen dacey graph hides this.
+
+```{r}
+param_sweep %>%
+  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1)  %>%
+    mutate(flows = map(sim, as_tibble, 'edges')) %>%
+    select(beta1:gamma, flows) %>%
+    unnest(flows) %>% 
+  select(beta1, beta2, from, to, trade_flow) %>%
+  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %E>%
+  filter(trade_flow > 10) %>%
+  arrange(trade_flow) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(aes(color = trade_flow), width = 1.2) +
+  scale_edge_color_viridis() +
+  facet_edges(beta1 ~ beta2) +
+  coord_equal() +
+  theme_void()
+```
+
+So from this we see that a bif proportion of the migrant flows go inward. Is this ok? its consistent with the potential behavior of the qubbaj model. But perhaps not if we introduce bariable migration
+```{r}
+param_sweep %>%
+  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1)  %>%
+    mutate(flows = map(sim, as_tibble, 'edges')) %>%
+    select(beta1:gamma, flows) %>%
+    unnest(flows) %>% 
+  select(beta1, beta2, from, to, migrant_flow) %>%
+  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %E>%
+  filter(migrant_flow > 10) %>%
+  filter(from != to) %>%
+  arrange(migrant_flow) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(aes(color = migrant_flow), width = 1.2) +
+  scale_edge_color_viridis() +
+  facet_edges(beta1 ~ beta2) +
+  coord_equal() +
+  theme_void()
+```
+
+"jumps" in the parameter space (clarke and wilson 1983 or 1985, regional science). basically the relationships between alpha and beta are consistent for this
+
+Explor the rank size distirbution
+
+Hard to see here, but for beta = 1 we can really see the effect of migration, longer migration distance leads to some pooling in center.
+But in general, variation due to trade swamps that from migration, becuase trade also shapes migration but less so the other way around.
+
+
+
+The parameters $\beta$
+
 
 
 now we are testing to see what the difference of initial conditions is ... doesn't look like it matters that much. makes sense, the real initial condition is the relative difference of the population centers
 
 
 ```{r}
-nsim <- 500
-sim <- settlements %N>%
-   mutate(food = env$grf_100, pattern = 0) %>%
-  accumulate(1:nsim, ~interact(.x), .init = .)
-
-sim2 <- settlements %N>%
-   mutate(food = env$random) %>%
-  accumulate(1:nsim, ~interact(.x), .init = .)
-
-sim3 <- settlements %N>%
-   mutate(food = env$constant, pattern = 0) %>%
-  accumulate(1:nsim, ~interact(.x), .init = .)
+nsim <- 1000
+plan(multisession)
+sim <- settlements %>%
+    prune(beta = 10, tolerance = .001) %N>%
+  list(., ., .) %>%
+  tibble(net = ., 
+         env_base = list( env$grf_01, env$grf_15, env$grf_50)) %>%
+  mutate(net = map2(net, env_base, ~mutate(.x, food = .y, anomaly = 0)),
+         sim = future_map(net, function(x) reduce(1:nsim, ~interact(.x), .init = x))) 
 ```
 
 
-```{r}
-sim %>%
-  map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time= as.numeric(time)) %>%
-  ggplot(aes(time, population, group = .tidygraph_node_index)) +
-  geom_line(alpha = .2) +
-  theme_classic()
-    
-sim2 %>%
-  map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time= as.numeric(time)) %>%
-  ggplot(aes(time, population, group = .tidygraph_node_index)) +
-  geom_line(alpha = .2) +
-  theme_classic()
-
-sim3 %>%
-  map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time= as.numeric(time)) %>%
-  ggplot(aes(time, population, group = .tidygraph_node_index)) +
-  geom_line(alpha = .2) +
-  theme_classic()
-```
 
 
-```{r, echo = FALSE}
-anim <- sim3 %>%
-   map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time = as.numeric(time)) %>%
-  filter(time < 200) %>%
-  #filter(time %% 10 == 0) %>%
-ggplot() +
-   # geom_sf(data = env, aes(fill = grf_100)) +
-  geom_point(aes(x, y, size = population))+
- # coord_sf(datum = NA) +
- coord_equal() +
-  # scale_fill_scico(palette = 'bamako') + 
-  theme_void() +
-  labs(title = 'Year: {closest_state}') +
-  transition_states(time)
 
-animate(anim, nframes = 399)
-```
+
+
+
 Below we see that, holding the distance deterrence parameters constant, the degree of spatial autocorrelation in the environment effects equilibrium territory size
 ```{r}
-last(sim) %>%
+p1 <- sim[[1,3]] %>%
   nystuen_dacey() %>%
   ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = grf_100)) +
-  geom_edge_link(alpha = .5) +
+    geom_sf(data = env, aes(fill = grf_01)) +
+  geom_edge_link() +
   scale_size_area() +
   geom_node_point(aes(size = population))+
   coord_sf(datum = NA) +
   scale_fill_scico(palette = 'bamako') +
   theme_void()
-last(sim2) %>%
+p2 <- sim[[2,3]] %>%
   nystuen_dacey() %>%
   ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = random)) +
-  geom_edge_link(alpha = .5) +
+    geom_sf(data = env, aes(fill = grf_15)) +
+  geom_edge_link() +
   scale_size_area() +
   geom_node_point(aes(size = population))+
   coord_sf(datum = NA) +
   scale_fill_scico(palette = 'bamako') +
   theme_void()
-last(sim3) %>%
+p3 <- sim[[3,3]] %>%
   nystuen_dacey() %>%
   ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = constant)) +
-  geom_edge_link(alpha = .5) +
+    geom_sf(data = env, aes(fill = grf_50)) +
+  geom_edge_link() +
   scale_size_area() +
   geom_node_point(aes(size = population))+
   coord_sf(datum = NA) +
   scale_fill_scico(palette = 'bamako') +
   theme_void()
+p1 + p2 + p3
 ```
+
+changing the size of autocorrelation in the environment does not seem to change the territory size/ nd graph for food appreciably. What about at different  beta levels? these results are at 5 and 10, so try others?
 
 ```{r}
-last(sim) %>%
-  nystuen_dacey(mode = 'migrants') %>%
+p4 <- sim[[1,3]] %>%
+  nystuen_dacey() %>%
+  mutate(group = group_components()) %>%
+  as_tibble %>%
+  bind_cols(env,.) %>%
+  select(x, y, food, population, anomaly, group) %>%
+  `st_precision<-`(10) %>%
+  group_by(group) %>%
+  summarise(food = sum(food), population = sum(population), geometry = st_union(geometry)) %>%
+  ggplot() +
+  geom_sf() +
+  scale_fill_scico(palette = 'bamako')
+
+p5 <- sim[[2,3]] %>%
+  nystuen_dacey() %>%
+  mutate(group = group_components()) %>%
+  as_tibble %>%
+  bind_cols(env,.) %>%
+  select(x, y, food, population, anomaly, group) %>%
+  `st_precision<-`(10) %>%
+  group_by(group) %>%
+  summarise(food = sum(food), population = sum(population), geometry = st_union(geometry)) %>%
+  ggplot() +
+  geom_sf(aes()) +
+  scale_fill_scico(palette = 'bamako')
+
+p6 <- sim[[3,3]] %>%
+  nystuen_dacey() %>%
+  mutate(group = group_components()) %>%
+  as_tibble %>%
+  bind_cols(env,.) %>%
+  select(x, y, food, population, anomaly, group) %>%
+  `st_precision<-`(10) %>%
+  group_by(group) %>%
+  summarise(food = sum(food), population = sum(population), geometry = st_union(geometry)) %>%
+  ggplot() +
+  geom_sf(aes()) +
+  scale_fill_scico(palette = 'bamako')
+
+p4 + p5 + p6
+```
+
+
+```{r}
+sim[[1,3]] %E>%
+  filter(trade_flow > 1) %>%
+  arrange(trade_flow) %>%
   ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = grf_100)) +
-  geom_edge_link(alpha = .5) +
+  geom_edge_fan(aes(color = trade_flow), width = 1.2) +
   scale_size_area() +
-  geom_node_point(aes(size = population))+
-  coord_sf(datum = NA) +
-  scale_fill_scico(palette = 'bamako') +
-  theme_void()
-last(sim2) %>%
-  nystuen_dacey(mode = 'migrants') %>%
-  ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = random)) +
-  geom_edge_link(alpha = .5) +
-  scale_size_area() +
-  geom_node_point(aes(size = population))+
-  coord_sf(datum = NA) +
-  scale_fill_scico(palette = 'bamako') +
-  theme_void()
-last(sim3) %>%
-  nystuen_dacey(mode = 'migrants') %>%
-  ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = constant)) +
-  geom_edge_link(alpha = .5) +
-  scale_size_area() +
-  geom_node_point(aes(size = population))+
-  coord_sf(datum = NA) +
-  scale_fill_scico(palette = 'bamako') +
+ # geom_node_point(aes(size = population))+
+  coord_equal() +
+  scale_edge_color_viridis() +
   theme_void()
 
+last(sim) 
+sim%E>%
+  filter(migrant_flow > 1) %>%
+  arrange(migrant_flow) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(aes(color = migrant_flow), width = 1.2) +
+ # geom_node_point(aes(size = population))+
+  coord_equal() +
+  scale_edge_color_viridis() +
+  theme_void()
 ```
+
+
+
+
 We don't see ideal free distribution
 
 There's not a clear relationship between size and local productivity. what about in the region?
-```{r}
-sim[[nsim+1]] %N>%
-  as_tibble %>%
-  bind_cols(env) %>%
-  ggplot(aes(food, population)) +
-  geom_point()
-```
+
 
 The larger one's hinterland is, the higher the population. not suprising
+
 ```{r}
-sim[[nsim]] %>%
-  mutate(hinterland = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE)) %>%
-  as_tibble() %>%
-  ggplot(aes(hinterland, population)) +
-  geom_point() +
-  geom_smooth()
+sim_dat %>%
+  filter(time == max(time)) %>%
+  ggplot(aes(harvest, immigrants)) +
+  geom_point(alpha = .5)
+
+sim_dat %>%
+  filter(time == max(time)) %>%
+  ggplot(aes(food, population)) +
+  geom_point(alpha = .5)
 ```
 
-
-when running time variable, maybe look at ratio of eq pop with and without?
 
 
 ## now add time
 also thinking about running these experiments with just a single city
 the problem is that cities die out early and don't have enough time 
 
+
+
+```{r}
+sim_dat <- sim %>%
+  map(as_tibble, 'nodes') %>%
+  bind_rows(.id = 'time') %>%
+  mutate(time = as.numeric(time))
+sim_dat %>%
+  ggplot(aes(time, population, group = id)) +
+  geom_line(alpha = .2) +
+  theme_classic()
+
+sim_dat %>%
+  ggplot(aes(harvest, population, group = id, color = time)) +
+  geom_path(alpha = .2) +
+  scale_color_viridis_c() +
+  theme_classic() +
+  coord_fixed()
+
+sim_dat %>%
+  ggplot(aes(immigrants, population, group = id, color = time)) +
+  scale_color_viridis_c() +
+  geom_path(alpha = .2) +
+  theme_classic() +
+  coord_equal()
+```
+
 it looks like cities will form at equilibrium where environmental variability is the least. but this might depend on the rate of change?
 ```{r}
-sim4 <- settlements %N>%
-   mutate(food = env$grf_100,
-          pattern = env$gradient_oscillation) %>%
+sim4 <- settlements %>%
+      prune(beta = 10, tolerance = .001) %N>%
+   mutate(food = env$grf_15,
+          anomaly = env$oscillation) %>%
   accumulate(sin(1:1000 * .05), ~interact(.x, fluctuation = .y), .init = .)
 ```
 
@@ -720,7 +841,7 @@ sim4 %>%
   map(as_tibble, 'nodes') %>%
   bind_rows(.id = 'time') %>%
   mutate(time= as.numeric(time)) %>% 
-  ggplot(aes(time, (population), group = .tidygraph_node_index)) +
+  ggplot(aes(time, (population), group = id)) +
   geom_line(alpha = .2) +
   theme_classic()
 ```
@@ -730,7 +851,7 @@ sim4 %>%
   map(as_tibble, 'nodes') %>%
   bind_rows(.id = 'time') %>%
   mutate(time= as.numeric(time)) %>% 
-  ggplot(aes(food, population, group = .tidygraph_node_index, color = .tidygraph_node_index)) +
+  ggplot(aes(food, population, group = id, color = id)) +
   geom_point(alpha = .2) +
   theme_classic()
 ```
@@ -753,7 +874,7 @@ last(sim4) %>%
   mutate(group = group_components()) %>%
   as_tibble %>%
   bind_cols(env,.) %>%
-  select(x, y, food, population, pattern, group) %>%
+  select(x, y, food, population, anomaly, group) %>%
   `st_precision<-`(10) %>%
   group_by(group) %>%
   summarise(food = sum(food), population = sum(population), geometry = st_union(geometry)) %>%
@@ -768,6 +889,7 @@ anim <- sim4 %>%
    map(as_tibble, 'nodes') %>%
   bind_rows(.id = 'time') %>%
   mutate(time = as.numeric(time)) %>%
+  filter(between(time, 1, 500)) %>%
  filter(time %% 5 == 0) %>%
 ggplot() +
   #  geom_sf(data = env, aes(fill = grf_100)) +
@@ -789,6 +911,10 @@ Here are two sample references: @Feynman1963118 [@Dirac1953888].
 
 # Discussion
 constant migration rate
+
+discuss in light of anderies and hegmon 2011 specificaly
+
+the importance of terriotiality and comeption for access to agricultural land
 
 importance of the onset timing onset of the variability regime relative to other stuff
 
