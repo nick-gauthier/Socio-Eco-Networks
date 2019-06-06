@@ -56,7 +56,7 @@ Metabolic costs, such as the energy expended producing and transporting food ove
 
 Sharing and exchange are critical for maintaining population in response to interannual climate variability, although this short term stability can come at the cost of long term environmental degradation [@Janssen2010]. More restricted sharing rules can be effective [@Hegmon1996], but can also be sensitive to the asymmetric accrual of debts if one party's food supply is more volatile than anothers' [@Crabtree2015]. Environemntal context of exchange important [@Freemanetaal2014].
 
-Specifically build on @Anderies2011 which explored the interaction of migration and resource heterogeneity. They used a 3 patch model to assess the role of migration and climate shocks in relation to ecological dynamics and cultural attitudes. This study presents a spatially rich extension that uses spatial interaction model to capture trade and migration flows within a structured population of settlements.
+Specifically build on @Anderies2011 which explored the interaction of migration and resource heterogeneity. They used a 3 patch model to assess the role of migration and climate shocks in relation to ecological dynamics and cultural attitudes. This study presents a spatially rich extension that uses spatial interaction model to capture trade and migration flows within a structured population of settlements.  An understanding of the patterns of variability in rainfall, in particular how rainfall covaries over different nodes in the network, will thus provide a baseline for kinds of environmental pressures which shape the dynamics of food-transfer systems. 
 
 The network matters. The topology of spatial networks also constrains who can interact with whom, introducing bottlenecks and other structural flow constraints [@Barthelemy2011SpatialNetworks,@qubbaj20111]. Improvements to transportation infrastructure, such as roads and trails, decrease the effective distance between different settlements; failure to maintain these transportation networks increases the effective distance [@McCall1985TheAfrica].
   
@@ -233,11 +233,11 @@ where $O_i$ is the total outflows from site $i$, $W$ represents a site's attract
 As a shorthand call beta1 "transport" ease and beta2 "travel" ease
 
 ```{r}
-trade <- function(net, alpha, beta, phi = radius / 2, fluctuation){
+trade <- function(net, alpha, beta, phi = radius / 2){
   net %E>%
    mutate(trade_utility = .N()$population[to] ^ alpha * exp(-if_else(distance > 0, distance, phi) / beta))  %N>%
     mutate(trade_balance = centrality_degree(weights = trade_utility, mode = 'out', loops = TRUE),
-           trade_production = food * (1 + anomaly * fluctuation)) %E>%
+           trade_production = food * yield) %E>%
     mutate(trade_flow = .N()$trade_production[from] * trade_utility / .N()$trade_balance[from]) %N>% 
     mutate(harvest = centrality_degree(weights = trade_flow, mode = 'in', loops = TRUE))
 }
@@ -264,34 +264,19 @@ migrate <- function(net, alpha1, alpha2, beta, nu = 0.05){
 }
 ```
 
-The entire system is composed of complicated nonlinear equations, as the growth and decline of settements can potentialy depend on al other settlements. Refer to @Anderies2011 for analytical exploration of a similar model. Now we use simulation to better understand the behavior of this model in different enviromental contexts.
 
-```{r}
-interact <- function(net, fluctuation = 1, alpha1 = 1.15, alpha2 = 1, beta1 = 5, beta2 = 10){
-  new_net <- net %E>%
-    trade(alpha = alpha1, beta = beta1, fluctuation = fluctuation) %>%
-    migrate(alpha1 = alpha1, alpha2 = alpha2, beta = beta2) %>%
-    grow %>%
-    select(-c(trade_balance:trade_production, migrant_balance:migrant_production, population_new)) %E>%
-    select(-c(trade_utility, migrant_utility)) %>%
-    activate('nodes')
-
-   if(sum(pull(new_net, eq) >= 100) < n){
-     return(new_net)
-   } else return(done(new_net))
-}
-```
 
 
 ## Environmental Variability
 
 The model does not account for the dynamics of agricultural production in the hinterland directly, and instead assuming a fixed baseline surplus food production each year that varies due to exogenous environmental factors (e.g. rainfall). By systematically varying the spatial and temporal patterns of surplus production, the researcher can investigate how the settlement system self organizes in response to those patterns of environmental variability.
 
+First we allow an external climate forcing function to influence resource-system dynamics. We assume a water-limited environment, so that the carrying capacity of the resource represents the limitation of soil moisture on resource abundance. We thus replace the static parameter X with some unknown function of climatic water balance.
+
+
+
+
 The climate anomalyis the spatial pattern.
-
-
-Rainfall varies smoothly, but it is important that crop yields do not vary linearly with rainfall. Yield should be a declining function of yield, such that given normal variability the risk of crop failure is higher than if there hadnt been any.
-Simple power function of rainfall is crop productionfunction
 
 ```{r}
 make_grf <- function(x, y, scale){
@@ -302,7 +287,7 @@ make_grf <- function(x, y, scale){
 }
 
 RFoptions(seed=100)
-env <- settlements %N>%
+spatial_patterns <- settlements %N>%
   mutate(constant = food_start,
          grf_01 = make_grf(x, y, 1),
          grf_15 = make_grf(x, y, 15),
@@ -313,33 +298,75 @@ env <- settlements %N>%
   select(-gradient2) %>%
   as_tibble %>%
   bind_cols(hinterlands,.)
-# think about scaling more
+```
+Rainfall varies normally in time, but it is important that crop yields do not vary linearly with rainfall. Yield should be a declining function of yield, such that given normal variability the risk of crop failure is higher than if there hadnt been any.
+Simple power function of rainfall is crop production function
 
-forcing_function <- expand_grid(time = 1:500, omega = c(.01, .05, .3)) %>%
-  mutate(value = map2_dbl(time, omega, ~sin(.x * .y)))
+Yields are modeled relative to their baseline value in a normal rainfall year. This is the same production as in @Janssen2011, although scaled to units of SPEI rather than PDSI.
+
+$$
+  X_i = 1.5 \hat{X_i}\left(1 - \exp\left(\frac{\ln(1/3)}{4} (\mathit{SPEI_i} - 4)\right) \right)
+$$
+where SPEI is the standardized precipitation evapotranspiration index. I model variation in SPEI as a simple AR(1) process
+
+$$
+     \mathit{SPEI}_{t+1} = \phi \mathit{SPEI}_t + \epsilon
+$$
+Where $\epsilon$ is drawn from a standard normal distribution and $\phi$ is controls the strength of autocorrelation between time steps. 
+
+This is the global SPEI value, it gets projected onto a particular grid cell $i$ by multiplyiing by a spatial anomaly $a$ as $\mathit{SPEI_i} = a \mathit{SPEI}$
+```{r}
+yield <- function(x){
+  pmax(1.5 * (1 - exp(log(1/3) / 4 * (x + 4))), 0)
+}
+
+weather <- function(SPEI, phi = 0){
+ phi * SPEI + rnorm(1)
+}
+
+produce_food <- function(net, SPEI){
+  net %N>%
+    mutate(yield = yield(EOF * SPEI))
+}
+
+t1 <- accumulate(1:100, ~weather(.x, phi = .6), .init = 0)[-1]
+qplot(x = 1:100, y = t1, geom = 'line');qplot(x = 1:100, y = yield(t1), geom = 'line')
 ```
 
 
-```{r fig.width = 10, fig.height = 6, fig.cap = 'Environmental layers'}
-p1 <- forcing_function %>%
-  mutate(omega = ordered(omega, levels = c('0.3', '0.05', '0.01'))) %>%
-  ggplot(aes(time, value, group = omega, color = omega)) +
+
+Annual precipitation $P$ at time step $t$ is drawn from an approximately Gaussian distribution with user defined mean precipitation $\hat{P}$, coefficient of variation $P_{cv}$, and AR(1) coefficient $\phi$:
+
+
+where $\epsilon \sim \mathcal{N}(0,\,1)\,$ is a white noise process.
+
+```{r}
+
+
+set.seed(10)
+temporal_patterns <- tibble(time = 1:1000,
+       `.1` = accumulate(time, ~weather(.x, phi = .1), .init = 0)[-1],
+       `.6` = accumulate(time, ~weather(.x, phi = .6), .init = 0)[-1])
+
+set.seed(NULL)
+
+
+temporal_patterns %>%
+  gather(phi, SPEI, 2:3) %>%
+  mutate(yield = yield(SPEI)) %>%
+  mutate(phi = ordered(phi)) %>%
+  filter(time <= 500) %>%
+  ggplot(aes(time, yield, group = phi, color = phi)) +
   geom_line(size = 1.2) +
+    geom_hline(yintercept = 1, color = 'red', linetype = 2) +
   scale_color_viridis_d(direction = -1) +
-  labs(color = expression(italic(omega))) +
+  facet_wrap(~phi, nrow = 2) +
+  labs(color = expression(italic(phi))) +
   theme_classic()
+```
 
-p2 <- env %>%
-  gather(variable, value, gradient, oscillation) %>%
-  mutate(variable = if_else(variable == 'gradient', 'Gradient', 'Oscillation')) %>%
-  ggplot() +
-  geom_sf(aes(fill = value), lwd = .1) +
-  facet_wrap(~variable, nrow = 1) +
-  theme_void() +
-  scale_fill_scico(palette = 'vik', direction = -1 , name = expression(italic(phi))) +
-  coord_sf(datum = NA)
-
-p3 <- env %>%
+```{r fig.width = 10, fig.height = 6, fig.cap = 'Environmental layers'}
+p1 <- spatial_patterns %>%
   gather(variable, value, grf_01:grf_50) %>%
   mutate(variable = as.ordered(variable),
          variable = fct_recode(variable,
@@ -353,37 +380,52 @@ p3 <- env %>%
   scale_fill_scico(palette = 'bamako', name = expression(hat(italic('X')))) +
   coord_sf(datum = NA)
 
+p2 <- forcing_function %>%
+  mutate(omega = ordered(omega, levels = c('0.3', '0.05', '0.01'))) %>%
+  ggplot(aes(time, value, group = omega, color = omega)) +
+  geom_line(size = 1.2) +
+  scale_color_viridis_d(direction = -1) +
+  labs(color = expression(italic(omega))) +
+  theme_classic()
 
-p3 / (p1 + p2) + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(2, 1))
+p3 <- spatial_patterns %>%
+  gather(variable, value, gradient, oscillation) %>%
+  mutate(variable = if_else(variable == 'gradient', 'Gradient', 'Oscillation')) %>%
+  ggplot() +
+  geom_sf(aes(fill = value), lwd = .1) +
+  facet_wrap(~variable, nrow = 1) +
+  theme_void() +
+  scale_fill_scico(palette = 'vik', direction = -1 , name = expression(italic(phi))) +
+  coord_sf(datum = NA)
+
+p1 / (p2 + p3) + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(2, 1))
+
+p1 + p3
 ```
 
+
+
+
+The entire system is composed of complicated nonlinear equations, as the growth and decline of settements can potentialy depend on al other settlements. The complexity of this system increases geometrically as the size of the social-ecological network increases,
+precluding exact analytic solutions. We must instead leverage computational simulations to capture these
+complex interactions numerically. Refer to @Anderies2011 for analytical exploration of a similar model. Now we use simulation to better understand the behavior of this model in different enviromental contexts.
 
 ```{r}
-yield <- function(rainfall){
-  1 * pmax(0, 0.51 * log(rainfall) + 1.03)  # annual rainfall impact on yields
+run_sim <- function(net, SPEI = 0, alpha1 = 1.15, alpha2 = 1, beta1 = 5, beta2 = 10){
+  new_net <- net %>%
+    produce_food(SPEI = SPEI) %>%
+    trade(alpha = alpha1, beta = beta1) %>%
+    migrate(alpha1 = alpha1, alpha2 = alpha2, beta = beta2) %>%
+    grow %>%
+    select(-c(trade_balance:trade_production, migrant_balance:migrant_production, population_new)) %E>%
+    select(-c(trade_utility, migrant_utility)) %>%
+    activate('nodes')
+
+   if(sum(pull(new_net, eq) >= 100) < n){
+     return(new_net)
+   } else return(done(new_net))
 }
-
-0.51 * log((rainfall)) + 1.03
-plot((0:200)/100, yield((0:200)/100), ylim = c(0, 1.5))
-
-plot((0:200)/100, 1.03 * ((0:200)/100)^.5  + 1,ylim = c(0, 1.5))
 ```
-
-```{r}
-nystuen_dacey <- function(net, mode = 'trade'){
-  net %E>%
-  group_by(from) %>%
-  {if (mode == 'trade') filter(., trade_flow == max(trade_flow)) else filter(., migrant_flow == max(migrant_flow))} %>%
-  ungroup %>%
-  filter(.N()$population[from] < .N()$population[to]) %N>%
-  mutate(terminal = node_is_sink()) %>%
-  convert(to_undirected) 
-}
-
-# try using node_is_ functions to calculate instead
-```
-
-
 
 ```{r}
 knitr::knit_exit()
@@ -406,9 +448,21 @@ param_sweep <- expand_grid(beta1 = c(5, 10, 15, 20),
                           alpha3 = c(0, 1),
                           gamma = c(.85, 1)) %>%
   filter(beta1 <= beta2) %>%
-  mutate(sim = future_pmap(list(beta1, beta2, alpha1, alpha2, alpha3, gamma), function(a,b,c,d,e,f) reduce(1:2000, ~interact(., beta1 = a, beta2 = b, alpha1 = c, alpha2 = d, alpha3 = e, gamma = f), .init = settlements %N>% mutate(anomaly = 0)), .progress = TRUE))
+  mutate(sim = future_pmap(list(beta1, beta2, alpha1, alpha2, alpha3, gamma), function(a,b,c,d,e,f) reduce(1:2000, ~run_sim(., beta1 = a, beta2 = b, alpha1 = c, alpha2 = d, alpha3 = e, gamma = f), .init = settlements %N>% mutate(anomaly = 0)), .progress = TRUE))
 
 saveRDS(param_sweep, 'param_sweep')
+```
+
+```{r}
+nystuen_dacey <- function(net, mode = 'trade'){
+  net %E>%
+  group_by(from) %>%
+  {if (mode == 'trade') filter(., trade_flow == max(trade_flow)) else filter(., migrant_flow == max(migrant_flow))} %>%
+  ungroup %>%
+  filter(.N()$population[from] < .N()$population[to]) %N>%
+  mutate(terminal = node_is_sink()) %>%
+  convert(to_undirected) 
+}
 ```
 
 ```{r}
@@ -654,9 +708,9 @@ sim <- settlements %>%
     prune(beta = 10, tolerance = .001) %N>%
   list(., ., .) %>%
   tibble(net = ., 
-         env_base = list( env$grf_01, env$grf_15, env$grf_50)) %>%
-  mutate(net = map2(net, env_base, ~mutate(.x, food = .y, anomaly = 0)),
-         sim = future_map(net, function(x) reduce(1:nsim, ~interact(.x), .init = x))) 
+         space_base = list( spatial_patterns$grf_01, spatial_patterns$grf_15, spatial_patterns$grf_50)) %>%
+  mutate(net = map2(net, space_base, ~mutate(.x, food = .y, anomaly = 0)),
+         sim = future_map(net, function(x) reduce(1:nsim, ~run_sim(.x), .init = x))) 
 ```
 
 
@@ -671,7 +725,7 @@ Below we see that, holding the distance deterrence parameters constant, the degr
 p1 <- sim[[1,3]] %>%
   nystuen_dacey() %>%
   ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = grf_01)) +
+    geom_sf(data = spatial_patterns, aes(fill = grf_01)) +
   geom_edge_link() +
   scale_size_area() +
   geom_node_point(aes(size = population))+
@@ -681,7 +735,7 @@ p1 <- sim[[1,3]] %>%
 p2 <- sim[[2,3]] %>%
   nystuen_dacey() %>%
   ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = grf_15)) +
+    geom_sf(data = spatial_patterns, aes(fill = grf_15)) +
   geom_edge_link() +
   scale_size_area() +
   geom_node_point(aes(size = population))+
@@ -691,7 +745,7 @@ p2 <- sim[[2,3]] %>%
 p3 <- sim[[3,3]] %>%
   nystuen_dacey() %>%
   ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = grf_50)) +
+    geom_sf(data = spatial_patterns, aes(fill = grf_50)) +
   geom_edge_link() +
   scale_size_area() +
   geom_node_point(aes(size = population))+
@@ -708,7 +762,7 @@ p4 <- sim[[1,3]] %>%
   nystuen_dacey() %>%
   mutate(group = group_components()) %>%
   as_tibble %>%
-  bind_cols(env,.) %>%
+  bind_cols(spatial_patterns,.) %>%
   select(x, y, food, population, anomaly, group) %>%
   `st_precision<-`(10) %>%
   group_by(group) %>%
@@ -721,7 +775,7 @@ p5 <- sim[[2,3]] %>%
   nystuen_dacey() %>%
   mutate(group = group_components()) %>%
   as_tibble %>%
-  bind_cols(env,.) %>%
+  bind_cols(spatial_patterns,.) %>%
   select(x, y, food, population, anomaly, group) %>%
   `st_precision<-`(10) %>%
   group_by(group) %>%
@@ -734,7 +788,7 @@ p6 <- sim[[3,3]] %>%
   nystuen_dacey() %>%
   mutate(group = group_components()) %>%
   as_tibble %>%
-  bind_cols(env,.) %>%
+  bind_cols(spatial_patterns,.) %>%
   select(x, y, food, population, anomaly, group) %>%
   `st_precision<-`(10) %>%
   group_by(group) %>%
@@ -830,9 +884,8 @@ it looks like cities will form at equilibrium where environmental variability is
 ```{r}
 sim4 <- settlements %>%
       prune(beta = 10, tolerance = .001) %N>%
-   mutate(food = env$grf_15,
-          anomaly = env$oscillation) %>%
-  accumulate(sin(1:1000 * .05), ~interact(.x, fluctuation = .y), .init = .)
+  mutate(EOF = spatial_patterns$oscillation) %>%
+  accumulate(temporal_patterns$`.6`, ~run_sim(.x, SPEI = .y), .init = .)
 ```
 
 so without scalking behavior you get the crazy initial growth but then it doesn't maintain. with scaling behavior it drops back off
@@ -860,7 +913,7 @@ sim4 %>%
 last(sim4) %>%
   nystuen_dacey() %>%
   ggraph(x = x, y = y) +
-    geom_sf(data = env, aes(fill = grf_100)) +
+    geom_sf(data = spatial_patterns, aes(fill = grf_100)) +
   geom_edge_link(alpha = .5) +
   scale_size_area() +
   geom_node_point(aes(size = population))+
@@ -873,7 +926,7 @@ last(sim4) %>%
   nystuen_dacey() %>%
   mutate(group = group_components()) %>%
   as_tibble %>%
-  bind_cols(env,.) %>%
+  bind_cols(spatial_patterns,.) %>%
   select(x, y, food, population, anomaly, group) %>%
   `st_precision<-`(10) %>%
   group_by(group) %>%
@@ -892,7 +945,7 @@ anim <- sim4 %>%
   filter(between(time, 1, 500)) %>%
  filter(time %% 5 == 0) %>%
 ggplot() +
-  #  geom_sf(data = env, aes(fill = grf_100)) +
+  #  geom_sf(data = spatial_patterns, aes(fill = grf_100)) +
   geom_point(aes(x, y, size = population))+#aes(color = terminal)) +
   #coord_sf(datum = NA) +
   coord_equal() +
