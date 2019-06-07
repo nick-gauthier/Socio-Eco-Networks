@@ -278,16 +278,15 @@ run_sim <- function(net, alpha1 = 1.15, alpha2 = 1, beta1 = 5, beta2 = 10, nu, m
 }
 ```
 
-```{r}
-knitr::knit_exit()
-```
+
 
 
 # Results
 
+
 First I explore baseline sensitivity of the model to key tuning parameters. interaction parameters $\beta_1$ and $beta_2$ governing the distance deterrence for trade and migration, respectively.
 
-We only assume that all $\alpha >= 1$, that is there are positive returns to scale in attractiveness, and $\beta_1 \leq \beta_2$ because moving food over the landscape should be more difficult than moving people. 
+We only assume that all $\alpha >= 1$, that is there are positive returns to scale in attractiveness, and 
 
 ```{r, eval=FALSE}
 plan(multisession)
@@ -319,19 +318,74 @@ nystuen_dacey <- function(net, mode = 'trade'){
 
 ```{r}
 param_sweep <- readRDS('param_sweep') %>%
-  mutate(dat = map(sim, as_tibble, 'nodes'),
+  mutate(nodes = map(sim, as_tibble, 'nodes'),
+         edges = map(sim, as_tibble, 'edges'),
         nd_trade = map(sim, nystuen_dacey),
          nd_migrants = map(sim, nystuen_dacey, mode = 'migrants'))
 ```
+
+
+## Distance deterrence and spatial patterning
+
+How does the cost of moving food and people over distances, as encoded in the $\beta$ parameters, influence settlement patterns at equilibrium. The $\beta$ parameters are the primary way space is introduced into the model. Critically, the costs -- be they in time, money, or energy -- of moving food and other resources from hinterlands to settlements will be different from the costs of moving people between settlements. The balance of these cost factors can introduce complexity via non linear interactions between the two. A settlement's trading catchment can be different from their migration catchment, so nontrivial spatial patterns can result from these interactions. Here I focus on the parameter space where $\beta_1 \leq \beta_2$, because moving bulk food supplies over the landscape should be more difficult than moving people. 
+
+With baseline values of $\alpha_1 = 1.15$, $\alpha_2 = 1$, $m_{max} = 0.05$ (population scaling and no hunger based migration). Increasing $\beta_1$, allowing food to be moved further distances, decreases the number of inhabited settlements at equilibrium and increases the size of these centers. The settlements also move closer to the center of the domain, as that supplies the maximum access to resources. There is a clear spatial bifurcation at $5 < \beta_1 < 10$. This is the difference above and below the distance of the nearest cell neighbor given the cell resoltion (nearest distance is approximately 8km).
+
+Holding $\beta_1$ constant and varying $\beta_2$ allowing migrants to move further than food. The result is a pattern of concentrric rings at low values of $\beta_1$. When it is difficult to move food over space, migration acts in lieu of food tranpsort by increasing the size of the terminal centers (allowing population to move to populated zones). But at beta2 = 15 there is a switch, where now the center is filled with multiple settlements of similar size in a hexagon pattern. The number of settlemetns in this central zone increases with increasing migration. IT seems that this might be a rsult of the size and shape of the spatial domain, as at long distance interaction the size and shape of the domain more strongly constrains the possible configurations. These inner zones decrease at increasing beta1, suggesting that what's happing is at low values of beta1 settlements must extact from their immediate area. Settlements at the edge get inital advangtages because they have fewer nearby cities competeing with them for resources. At low beta2, this doesn't matter as much, but at high beta2 it sets of a feedback because population migrates to the sites with initial advantages. When beta1 is higher, beta2 doesn't neceesaryily change the patterns that much, just serves to concentrate more poeple in fewer core settlemetns that are closer together. At the highest values of beta and beat2, the hexagonal core returns, if smaller than in the low beta1 case. The key feature to my mind is the bifurcation between $\beta_1$ at 5 and 10.  
+
+AS migration increases the central settlement splits into a greater number of smaller settlements.
+
+If transportation technology allows food to move more easily between scales, that process dominates and the system organizes around the territorial reach of each settlements, and the resulting feedbacks with food flows and size predominate. When beta1 is low/transport tech is low, it is harder to move food between terirtories and migration predominates in shaping settlement patterns.Likewsie, there isn't much of adiffernce between the 10 and 15 threshold because that's still between settlements (the distances are 8 and 17). So that middle zone thing only happens when alpha 3 is zero. That is it is a result of the population seeking behavior. When we allow people to avoid locations near carrying capacity, the system is allowed to balance out better. Although these are edge effects, this does have important implications for for geographically bounded systems. Variations in transport capacity only matter up to the constraint of maximum travelable distance. decreasing transport and travel costs.
+
+So generally we see that the costs of moving resources from hinterlands to settlements effects territory size, which is the primary determinate of equilibrium site size and spatial configuration. However, migration has a more subtle effect of redistributing people among settlements, although the absolute population is less impacted.
+
+```{r, fig.cap = "Food to people, vs people to food"}
+a <- param_sweep %>%
+  select(beta1:m_max, nodes) %>%
+  unnest(col = c(nodes)) %>%
+  select(beta1:m_max, population, x, y, harvest, immigrants) %>%
+  filter(alpha1 == 1.15, alpha2 == 1, m_max == 0.05, beta2 == 20) %>%
+  group_by(beta1, beta2)%>%
+  arrange(population) %>%
+  ggplot(aes(x, y)) +
+  geom_point(aes(size = population, color = population))+
+  scale_size_area() +
+  scale_color_viridis_c(guide = 'legend') +
+  coord_equal() +
+  theme_void() +
+  facet_wrap(~beta1, nrow = 1)
+
+b <- param_sweep %>%
+  select(beta1:m_max, nodes) %>%
+  unnest(col = c(nodes)) %>%
+  select(beta1:m_max, population, x, y, harvest, immigrants) %>%
+  filter(alpha1 == 1.15, alpha2 == 1, m_max == 0.05, beta1 == 5) %>%
+  group_by(beta1, beta2)%>%
+  arrange(population) %>%
+  ggplot(aes(x, y)) +
+  geom_point(aes(size = population, color = population))+
+  scale_size_area() +
+  scale_color_viridis_c(guide = 'legend') +
+  coord_equal() +
+  theme_void() +
+  facet_wrap(~beta2, nrow = 1)
+
+
+
+
+a / b + plot_annotation(tag_levels = 'A')
+```
+
 
 Rank size distribution. Increasing $\beta_2$ increases the convexity of the rank size distribution. Increasing $\beta_1$ decreases it
 
 ```{r}
 param_sweep %>%
-  select(beta1:gamma, dat) %>%
-  unnest(col = c(dat)) %>%
-  select(beta1:gamma, population, x, y, harvest, immigrants) %>%
-  filter(alpha1 == 1, alpha2 == 1, alpha3 == 0, gamma == 1) %>%
+  select(beta1:m_max, nodes) %>%
+  unnest(col = c(nodes)) %>%
+  filter(population > 1) %>%
+  select(beta1:m_max, population, x, y, harvest, immigrants) %>%
+  filter(alpha1 == 1.15, alpha2 == 1, m_max == 0.05, beta1 == 5) %>%
   group_by(beta1, beta2) %>%
   arrange(-population) %>%
   mutate(rank = 1:n()) %>%
@@ -340,60 +394,34 @@ param_sweep %>%
   geom_point() +
   scale_x_log10() +
   scale_y_log10() +
-  facet_grid(rows = vars(beta1), cols = vars(beta2), scales = 'free_y') +
+  facet_wrap(~beta2, scales = 'free_y') +
+  geom_smooth() +
   theme_classic()
 ```
 
-The general pattern is a spatial doubling bifurcation
-With baseline values of $\alpha_1 = \alpha_2 = 1$, $\alpha_3 = 0$ and $\gamma = 1$ (that is, no scaling behavior or hunger based movement). Increasing $\beta_1$, allowing food to be moved further distances, decreases the number of inhabitet settlements at equilibrium and increases the size of these centers (though not as much as migration). The settlements also move closer to the center of the domain, as that supplies tha maximum access to resources. Holding $\beta_1$ constant and varying $\beta_2$ allowing migrants to move further than food. The result is a pattern of concentrric rings at low values of beta1. When it is difficult to move food over space, migration acts in lieu of food tranpsort by increasing the size of the terminal centers (allowing population to move to populated zones). But at beta2 = 15 there is a switch, where now the center is filled with multiple settlements of similar size in a hexagon pattern. The number of settlemetns in this central zone increases with increasing migration. IT seems that this might be a rsult of the size and shape of the spatial domain, as at long distance interaction the size and shape of the domain more strongly constrains the possible configurations. These inner zones decrease at increasing beta1, suggesting that what's happing is at low values of beta1 settlements must extact from their immediate area. Settlements at the edge get inital advangtages because they have fewer nearby cities competeing with them for resources. At low beta2, this doesn't matter as much, but at high beta2 it sets of a feedback because population migrates to the sites with initial advantages. When beta1 is higher, beta2 doesn't neceesaryily change the patterns that much, just serves to concentrate more poeple in fewer core settlemetns that are closer together. At the highest values of beta and beat2, the hexagonal core returns, if smaller than in the low beta1 case. The key feature to my mind is the bifurcation between $\beta_1$ at 5 and 10. This is the showing difference above and below the distance of the nearest cell neighbor given the cell resoltion (nearest distance is approximately 8km). If transportation technology allows food to move more easily between scales, that process dominates and the system organizes around the territorial reach of each settlements, and the resulting feedbacks with food flows and size predominate. When beta1 is low/transport tech is low, it is harder to move food between terirtories and migration predominates in shaping settlement patterns.Likewsie, there isn't much of adiffernce between the 10 and 15 threshold because that's still between settlements (the distances are 8 and 17)
+For the following discussion, I generally constrain $\beta_1 = 5$, meaning that sites can only directly access the immediate neighboring hinterlands if they're of the same size.
 
-So that middle zone thing only happens when alpha 3 is zero. That is it is a result of the population seeking behavior. When we allow people to avoid locations near carrying capacity, the system is allowed to balance out better.
 
-Although these are edge effects, this does have important implications for for geographically bounded systems. Variations in transport capacity only matter up to the constraint of maximum travelable distance. decreasing transport and travel costs ()
-```{r}
-param_sweep %>%
-  select(beta1:gamma, dat) %>%
-  unnest(col = c(dat)) %>%
-  select(beta1:gamma, population, x, y, harvest, immigrants) %>%
-  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1) %>%
-  group_by(beta1, beta2)%>%
-  #filter(beta1 == 5) %>%
-  arrange(population) %>%
-  ggplot(aes(x, y)) +
-  geom_point(aes(size = population, color = population))+
-  scale_size_area() +
-  scale_color_viridis_c(guide = 'legend') +
-  coord_equal() +
-  theme_void() +
-  facet_grid(rows = vars(beta1), cols = vars(beta2))
-```
-Introducing scaleing parameters to the population size doesn't change the basic interaction between the betas. It does greatly increase the population size. Incorporating alpha3 does change the settlemnt patterns somewhat.. But again the basic relationship between beta1 and beta2 doesn't change
+## Settlement attractiveness and returns to scale
+
+
+Introducing scaleing parameters to the population size doesn't change the basic interaction between the $\beta$ parameters, but does impact the size heirarchy 
 
 the center zone behavior arises if we set alpha1=alpha2, and turn on alpha3. that is all the alphas are the same, then the population center hexagon arises much faster, at lower values of beta2, and is much larger. It goes away if we turn on scaling for gamma. This suggests the case where movement is easy, but there are few advantages to living in larger sites, and what adantages do arise are equalized by the alpha3 bejavior
-```{r}
-param_sweep %>%
-  select(beta1:gamma, dat) %>%
-  unnest(col = c(dat)) %>%
-  select(beta1:gamma, population, x, y, harvest, immigrants) %>%
-  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1) %>%
-  group_by(beta1, beta2)%>%
-  arrange(population) %>%
-  ggplot(aes(x, y)) +
-  geom_point(aes(size = (population), color = (population)))+
-  scale_size_area() +
-  scale_color_viridis_c() +
-  coord_equal() +
-  theme_void() +
-  facet_grid(rows = vars(beta1), cols = vars(beta2))
-```
-Constaining beta1 to 5 and beta2 to 10, then exploring alphas. All else being equal, we'd assume $\alpha_1 = \alpha_2$ since they both relate the the scaling with population size, and the differences in the importance of population size between travel and transport attractiveness would be introduced by the prefactor (which get's cancelled here given the normalization). Nevertheless we explore different combinations of alphas. Generally, increasing eigher alpha increases the concentration of popualtions in fewer centers. As before, the settlemetns near the edge grow higherst, because there is less competition for access to resources. Turning on alpha 3, so that people avoid crowded locations, considerably icnreases the complexity of the system. This removes the apparent similarity between the alphas, with more nonlinear responses
+
+
+
+
+Constraining beta1 to 5 and beta2 to 10, then exploring alphas. All else being equal, we'd assume $\alpha_1 = \alpha_2$ since they both relate the the scaling with population size, and the differences in the importance of population size between travel and transport attractiveness would be introduced by the prefactor (which get's cancelled here given the normalization). Nevertheless we explore different combinations of alphas. Generally, increasing eigher alpha increases the concentration of popualtions in fewer centers. As before, the settlemetns near the edge grow higherst, because there is less competition for access to resources. Turning on alpha 3, so that people avoid crowded locations, considerably icnreases the complexity of the system. This removes the apparent similarity between the alphas, with more nonlinear responses
+
+We also explore the equilibria when $\alpha_2 = 0$, dexcribing a system in which only population size and not food availability influences migration.
 
 ```{r}
 param_sweep %>%
-  select(beta1:gamma, dat) %>%
-  unnest(col = c(dat)) %>%
-  select(beta1:gamma, population, x, y, harvest, immigrants) %>%
-  filter(beta1 == 5, beta2 == 10, alpha3 == 1, gamma == 1) %>%
+  select(beta1:m_max, nodes) %>%
+  unnest(col = c(nodes)) %>%
+  select(beta1:m_max, population, x, y, harvest, immigrants) %>%
+  filter(beta1 == 5, beta2 == 10, m_max == 0.05) %>%
   group_by(alpha1, alpha2)%>%
   arrange(population) %>%
   ggplot(aes(x, y)) +
@@ -402,50 +430,129 @@ param_sweep %>%
   scale_color_viridis_c(guide = 'legend') +
   coord_equal() +
   theme_void() +
-  facet_grid(rows = vars(alpha1), cols = vars(alpha2))
+  facet_grid(rows = vars(alpha2), cols = vars(alpha1))
+
+param_sweep %>%
+  select(beta1:m_max, nodes) %>%
+  unnest(col = c(nodes)) %>%
+  select(beta1:m_max, population, x, y, harvest, immigrants) %>%
+  filter(beta1 == 5, beta2 == 15, m_max == 0.05) %>%
+  group_by(alpha1, alpha2)%>%
+  arrange(population) %>%
+  ggplot(aes(x, y)) +
+  geom_point(aes(size = population, color = population))+
+  scale_size_area() +
+  scale_color_viridis_c(guide = 'legend') +
+  coord_equal() +
+  theme_void() +
+  facet_grid(rows = vars(alpha2), cols = vars(alpha1))
 ```
 
-let's analyze the patterns statistically. we calculate the total population of each simulation, and the relative shannon entropy of the population distribution, and index of dispersion. Values of 0 indicatea fully concentrated in a single point systen, 1 is as dispersed as possible. From this we see gamma greatly increases the max population, enough so that its hard to see. with gamma = .85, we see a roughly linear decline in entropy (ie increasing concentration with increasing settlement size). No such relationship with gamma = 1. Bsaically it seems that gamma is so powerful it swamps out other considerations.
+
+## Food availability and decision to migrate
+If beta2 is high, having a high nu value (migration happens slower) arrives at the same equilibrium as having no pulse migration whatsoever. Introducing nu breaks some of the symmetry in the pther settlement patterns
+
 ```{r}
 param_sweep %>%
-  select(beta1:gamma, dat) %>%
-  mutate(population = map_dbl(dat, ~sum(.$population)),
-         prob_vect = map2(dat, population, ~ (.x$population) / .y),
-         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300))) %>%
-  select(beta1:gamma, population, entropy) %>%
-  ggplot(aes(population, entropy)) + geom_point(aes(color = gamma)) + facet_wrap(~gamma, scales = 'free_x')
+  select(beta1:m_max, nodes) %>%
+  unnest(col = c(nodes)) %>%
+  select(beta1:m_max, population, x, y, harvest, immigrants) %>%
+  filter(beta1 == 15, beta2 == 20, alpha1 == 1.1, alpha2 == 1) %>%
+  arrange(population) %>%
+  ggplot(aes(x, y)) +
+  geom_point(aes(size = population, color = population))+
+  scale_size_area() +
+  scale_color_viridis_c(guide = 'legend') +
+  coord_equal() +
+  theme_void() +
+  facet_grid(rows = vars(nu), cols = vars(m_max))
 ```
+```{r}
+knitr::knit_exit()
+```
+
+## Equilibrium behavior
+
+
+let's analyze the patterns statistically. we calculate the total population of each simulation, and the relative shannon entropy of the population distribution, and index of dispersion. Values of 0 indicatea fully concentrated in a single point systen, 1 is as dispersed as possible.
+
+Remember that high population usually means more dispersion, that means more settlements. maybe some measure of the heirarchy
+
+So with constant low migration higher populatio nis related to low beta1, high beta2. Alpha1 increases migration at lower values but it is nonlinear (reflecting underlying power law). Alpha 2 has almost no effect. That said, these parameters only explain ca 20% of the deviance
+
+```{r}
+dat <- param_sweep %>%
+  select(beta1:m_max, nodes) %>%
+  mutate(population = map_dbl(nodes, ~sum(.$population)),
+         prob_vect = map2(nodes, population, ~ (.x$population) / .y),
+         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300)),
+         count = map_dbl(nodes, ~sum(.$population > 1))) %>%
+  select(beta1:m_max, population, entropy, count) %>%
+  as_tibble
+
+library(mgcv)
+dat %>%
+  filter(m_max == 0.05) %>%
+mgcv::gam(population ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4),
+          data = .) %>% plot
+```
+
+If we look at the pulse migration context, alpha 2 matters a bit more but the effect is still weak. Interestingly, nu also plays a small role. so basically nu and related parameterizations have little effect on the equilibrium, but probably more of an impact on the dynamics. Beta1 isless distinct here, looks like a population peak at beta= 15
+```{r}
+dat %>%
+  filter(m_max == 0.5) %>%
+mgcv::gam(population ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4) + s(nu, k = 3),
+          data = .) %>% plot
+```
+Similar picture with more complex interactions.
+```{r}
+dat %>%
+  filter(m_max == 0.05) %>%
+mgcv::gam(population ~ s(beta1, beta2, k = 8) + s(alpha1, alpha2, k = 8),
+          data = .) %>% plot(scheme = 1)
+```
+
+The parameters do a mych better job of explaining entropy, approximately 90% of the deviance is expalined. Beta1 is the strongest determinate of entropy. Low beta1 results in high entropy (high despersion), and the relationship is nonlinaer. Increasing beta2 has a small linear increase in dispersion. The ninlinear break between 5 and 10 beta1 (around the difference in cell size) is visible here. Alpha1=1 slightly increases the dispersion, but as soon as scale economies are increased by raising it the strength of the interaction decrases. Alpha2 linearly increases dispersion
+```{r}
+dat %>%
+  filter(m_max == 0.05) %>%
+mgcv::gam(entropy ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4),
+          data = .) %>% plot
+```
+
+Now for the case with pulse migration. same basic relationship as before. increasing nu slightly decreases dispersion, but the effect is small. Again, the lack of difference between the m_max cases suggests that variable influences the transient dynamics rather than the equilibrium.
+```{r}
+dat %>%
+  filter(m_max == 0.5) %>%
+mgcv::gam(entropy ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4) + s(nu, k = 3),
+          data = .) %>% plot
+```
+
+Finally we look at relationships to the count of sites with popualtion > 1 at equilibrium. Here beta1 again, at low values increases the count. Beta2 increases, and below 10 it more decreases the count. So if migration is difficult, fewer site grow. Alpha1 matters alot. When alpha1 is 0, so there are no returns to population, much more sites surviv to equilibrium. At increasing levels of alpha2, this efefct is less pronounced. Increasing nu decreases count, but only slightly (so slower migration production arises the fewer sites there are.)
+
+```{r}
+dat %>%
+  filter(m_max == 0.5) %>%
+mgcv::gam(count ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4) + s(nu, k = 3),family = poisson, data = .) %>% plot
+```
+
+That was all for the pulsemigration case. Without that, there is a thershold at beta1 = 15, beyond which it doesn't change the count of sizes that much. The other relationships are similar, although beta2 is more pronounced. Alpha2 also matters here, unlike in other cases. Increasing the returns to food supply increases the count at equilibrium.
+```{r}
+dat %>%
+  filter(m_max == 0.05) %>%
+mgcv::gam(count ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4),family = poisson, data = .) %>% plot
+```
+
 So looking at the parametr combinations that lead to high poplation or high concentration ... low beta1 and high beta2 have the highest population, more sensitive to beta1, and alphas set to 0, and alpha 2 more important to be low than otherwise. This is what we saw in the graphs with the large central areas, which reflect low transport costs and low returns to scale. For the entropy case, low beta1 means higher etnropy (ie more dispersion). Beta2 maetters less, and again with low or no scaling. having alpha3 in the mix also increases dispersion, all as we'd expect.
-```{r}
-param_sweep %>%
-  select(beta1:gamma, dat) %>%
-  mutate(population = map_dbl(dat, ~sum(.$population)),
-         prob_vect = map2(dat, population, ~ (.x$population) / .y),
-         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300))) %>%
-  select(beta1:gamma, population, entropy) %>%
-  filter(gamma == 1) %>%
-  arrange(-entropy)
-```
+
+So most dispersed (high entropy) patterns arise when territories are small, migration is eaisy, and migration is influence more by food access then by populatoin. Especially if we assume migration is a fast response to carrying capacity. So basically we have a lot of people moving around right as carrying capacity is reached.
+
+
+
+Enropy is lowest (most concentrated) when movement is easiy in eigher domain, and people only make movement decisions based on size sizes, and migration response to food stress is gradual. This means people are attrated to high population settlements, they can move easily to them
+
 
 intrestingly, there seems to be very little variability around beta1 is 15, that's when we get to 3 city attractor. beta 2 increasing slightly decrases entropy, but not as strongly as beta1. having alpha3 in the mix slightly increases the entropy, but the boxplots are still within the range of one another as we might expect
-```{r}
-param_sweep %>%
-  select(beta1:gamma, dat) %>%
-  mutate(population = map_dbl(dat, ~sum(.$population)),
-         prob_vect = map2(dat, population, ~ (.x$population) / .y),
-         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300))) %>%
-  select(beta1:gamma, population, entropy) %>%
-  filter(gamma == 1) %>%
-  ggplot(aes(beta1, entropy, group = beta1)) + geom_boxplot()
-
-param_sweep %>%
-  select(beta1:gamma, dat) %>%
-  mutate(population = map_dbl(dat, ~sum(.$population)),
-         prob_vect = map2(dat, population, ~ (.x$population) / .y),
-         entropy = map_dbl(prob_vect, ~ -sum(. * log(.)) / log(300))) %>%
-  select(beta1:gamma, population, entropy) %>%
-  ggplot(aes(gamma, entropy, group = gamma)) + geom_boxplot()
-```
 
 So what does this all leave us with. Beta1 governs the spacing of the centers, beta2 and alphas more impact the population distirbution. Alphas specifically increase the heirarchies
 
@@ -453,26 +560,15 @@ So generally we see more settlements with decreasing beta. With increasing alpha
 
 Past a beta of .4 or whatever, the patterns don't change. this is because at this point, the distance decay function attentuates at or below the baseline 10km distance between settlements. Important to not here that the interperation of the value of beta depends on the characteristic length scale.
 
-```{r}
-param_sweep %>%
-    select(beta1, beta2, nd_trade) %>%
-    mutate(nd = map(nd_trade, as_tibble, 'edges')) %>%
-    unnest(nd) %>%
-  select(beta1, beta2, from, to) %>%
-  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
-  ggraph(x = x, y = y) +
-  geom_edge_link(alpha = .5) +
-  facet_edges(beta1 ~ beta2, ncol= 5) +
-  coord_equal() +
-  theme_void()
-```
+
+
 We can agian confrim the genral patterns above by looking at the nystuen dacey graphs. Confirming that the mass of same sized sites reflects that they have no nystuen dacey graph for trade, ie they're all competing for the same land and no clear winner gets the flows. We do get migrants out from the core to the edge sites, hence the hexagonal pattern of the core zone. these patterns arent particularly sensitive to the alphas.
 ```{r}
 #trade
 param_sweep %>%
-  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1)  %>%
+  filter(alpha1 == 1.15, alpha2 == 1, m_max == .05)  %>%
     mutate(nd = map(nd_trade, as_tibble, 'edges')) %>%
-    select(beta1:gamma, nd) %>%
+    select(beta1:m_max, nd) %>%
     unnest(nd) %>%
   select(beta1, beta2, from, to) %>%
   tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
@@ -484,9 +580,9 @@ param_sweep %>%
 
 #migrants
 param_sweep %>%
-  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1)  %>%
+  filter(alpha1 == 1.15, alpha2 == 1, m_max == .05)  %>%
     mutate(nd = map(nd_migrants, as_tibble, 'edges')) %>%
-    select(beta1:gamma, nd) %>%
+    select(beta1:m_max, nd) %>%
     unnest(nd) %>%
   select(beta1, beta2, from, to) %>%
   tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
@@ -495,15 +591,30 @@ param_sweep %>%
   facet_edges(beta1 ~ beta2) +
   coord_equal() +
   theme_void()
+
+
+
+param_sweep %>%
+  filter(beta1 == 10, beta2 == 15, m_max == .05)  %>%
+    mutate(nd = map(nd_trade, as_tibble, 'edges')) %>%
+    select(beta1:m_max, nd) %>%
+    unnest(nd) %>%
+  select(alpha1, alpha2, from, to) %>%
+  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %>%
+  ggraph(x = x, y = y) +
+  geom_edge_link(alpha = .5) +
+  facet_edges(alpha1 ~ alpha2) +
+  coord_equal() +
+  theme_void()
 ```
 
 But remember, in the case of the migration flows, the nd graph might be misleading because you can have significant flows of migration between the large cities, even if the nystuen dacey graph hides this.
 
 ```{r}
 param_sweep %>%
-  filter(alpha1 == 1.15, alpha2 == 1.15, alpha3 == 1, gamma == 1)  %>%
+  filter(alpha1 == 1.15, alpha2 == 1.15, m_max == .05)  %>%
     mutate(flows = map(sim, as_tibble, 'edges')) %>%
-    select(beta1:gamma, flows) %>%
+    select(beta1:m_max, flows) %>%
     unnest(flows) %>% 
   select(beta1, beta2, from, to, trade_flow) %>%
   tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %E>%
@@ -594,6 +705,17 @@ sim_dat %>%
   geom_point(alpha = .5)
 ```
 
+
+
+
+what about edges
+
+```{r}
+param_sweep %>%
+  select(beta1:m_max, edges) %>%
+  mutate(edges = map(edges, ~filter(., trade_flow > 1 | migrant_flow > 1)))
+  unnest(col = c(edges))
+```
 
 
 ## now add time
@@ -747,7 +869,8 @@ animate(anim, nframes = 999)
 
 It matters less if you're on productive land, more if you have access to productive land no one else does
 
-Here are two sample references: @Feynman1963118 [@Dirac1953888].
+
+## Network reconstruction
 
 
 # Discussion
