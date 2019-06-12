@@ -8,11 +8,12 @@ author:
 address:
   - code: Arizona State University
     address: School of Human Evolution and Social Change, S. Caddy Mall, Tempe, AZ, Zip
-abstract:
+abstract: Archaeological settlement patterns are the physical remains of complex webs of human decision-making and social interaction. Entropy-maximizing spatial interaction models are a means of building parsimonious models that average over much of this small-scale complexity, while maintaining key large-scale structural features. Dynamic social interaction models extend this approach by allowing archaeologists to explore the coevolution of human settlement systems and the dynamic interactions that underly them. Yet, such models are often imprecise, relying on generalized notions of settlement "influence" and "attractiveness" rather than concrete material flows of goods and people. Here, I present a disaggregated spatial interaction model that explicitly resolves trade and migration flows and their combined influence on settlement growth and decline. I explore how the balance of costs and benefits of each type of interaction influence long-term settlement patterns. I find trade flows are the strongest determinant of equilbrium settlement structure, and that migration flows play a more transient role in balancing site hierarchies. This model illustrates how the broad toolkit for spatial interaction modeling developed in geography and economics can aid the precision of quantitative theory building in archaeology, and provides a roadmap for connecting mechanistic models to the empirical archaeological record.
 
-journal: "Journal of Archaeological Science"
+journal: "Journal of Archaeological Method and Theory"
 date: "`r Sys.Date()`"
 bibliography: references.bib  
+biblio-style: "authoryear"
 output:
  bookdown::pdf_book:
   base_format: rticles::elsevier_article
@@ -21,7 +22,7 @@ output:
 
 ```{r echo = FALSE, eval = FALSE, cache=TRUE}
 # Install necessary packages if not already available (not run by default)
-install.packages(c('tidyverse', 'tidygraph', 'furrr'))
+install.packages(c('tidyverse', 'tidygraph', 'furrr', 'gratia'))
 #bookdown and rticles too?
 # install the dev versions of these packages from github using devtools
 install.packages('devtools')
@@ -41,39 +42,41 @@ library(gganimate)
 library(patchwork)
 library(furrr)
 library(mgcv)
+library(gratia)
 ```
 
 # Introduction
 
-Regional archaeological settlement patterns arise from the interactions of multidues of individual agents, each making decisions with imperfect and incomplete information about the perceived costs and benefits of social interaction. Yet, in spite of the intricate complexity visible at scale of individuals, empirical regularities begin to emerge at increasingly larger scales. So-called "entropy-maximizing" spatial interaction models capitalize on this change-of-scale property. Entropy maximization is a means of making unbiased estimates of the most likely distribution of large-scale properties of a system (such as a social network embedded in space) by making the fewest possible assumptions about micro-scale dynamics (such as human decision-making) [@Presse2013PrinciplesPhysics]. An entropy-maximizing spatial interaction model estimates the *flow* of a constrained quantity -- such as goods or people -- between discrete spatial zones as a function of their distance and measures of their mutual "attractiveness" [@Wilson2011EntropyModelling]. They model social interaction by systematizing the basic costs and benefits used in decision-making, and scaling them up subject while ensuring simple self-consistency constraints are met (such as the sum of inflows equals the sum of outflow). Archaeologists in particular have embraced this modeling paradigm, as its focus on the relationship between micro-scale behaviors and macro-scale structures mirrors the struggle to infer past human behaviors from the large-scale settlement patterns visible on the landscape.
+Regional archaeological settlement patterns arise from the interactions of many individual agents, each making decisions with imperfect and incomplete information about the perceived costs and benefits of social interaction. Yet in spite of the intricate complexity visible at the scale of individuals, empirical regularities begin to emerge at increasingly larger scales. So-called "entropy-maximizing" spatial interaction models capitalize on this change-of-scale property. Entropy maximization is a means of making unbiased estimates of the large-scale properties of a system by making the fewest possible assumptions about micro-scale dynamics [@Presse2013]. An entropy-maximizing spatial interaction model estimates the *flow* of a constrained quantity such as goods and people between discrete spatial zones as a function of their distance and measures of their mutual "attractiveness" [@Wilson1971a]. They model social interaction by systematizing the basic costs and benefits used in decision-making and scaling them up while ensuring that simple self-consistency constraints (such as total inflows equals total outflows) are met. Archaeologists in particular have embraced this modeling paradigm, as its focus on the relationship between micro-scale behaviors and macro-scale structures mirrors the struggle to infer past human behaviors from the large-scale settlement patterns visible on the landscape [@Bevan2013].
 
-In isolation, an entropy-maximizing interaction model is essentially a statistical tool, estimating the most likely configuration of flows between settlements given the constraints at hand. *Dynamic* spatial interaction models, on the other hand, combine these flow estimates with another mechanistic model to describe how these flows wax and wane over time. In such cases, the spatial interaction model captures the "fast" dynamics -- the balance of flows between locations as a function of their relative size or importance -- and the mechanistic model captures the "slow" dynamics governing how the locations grow or decline because of their access to those flows. As used in archaeology, the slow dynamics are typically represent simple equilibrium-seeking behavior, in which the model evolves so as to balance inflows and outflows. As a result, many archaeological applications of these models use them as heuristic tools for finding equilibrium settlement distributions, rather than as true dynamical models that explicitly resolve the time evolution of settlement systems. 
+In isolation, an entropy-maximizing interaction model is essentially a statistical tool, estimating the most likely configuration of flows between settlements given the relevant constraints. *Dynamic* spatial interaction models, on the other hand, combine these flow estimates with one or more mechanistic models to describe how these flows wax and wane over time [@Harris1978]. In such cases, the spatial interaction model captures the "fast" dynamics -- the balance of flows between locations as a function of their relative size or importance -- and the mechanistic model captures the "slow" dynamics governing how the locations grow or decline because of their access to those flows. As implemented in archaeology, the slow dynamics are typically a simple equilibrium-seeking behavior in which settlements evolve only to balance inflows and outflows. As a result, many archaeological applications of these models use them as heuristic tools for finding equilibrium settlement distributions rather than as true dynamical models that explicitly resolve the time evolution of settlement systems [@Bevan2013]. 
 
-A powerful alternative to the equilibrium-seeking slow dynamic in archaeological spatial interaction models are Lotka-Volterra type consumer resource equations. Lotka-Volterra equations are used in ecology to model energy flows in a food web. More generally, these models can represent energy flows in any social-ecological system, such as an agricultural settlement consuming resources from its hinterland [@Anderies2011a,Qubbaj2014]. Spatial interaction models are particularly useful for incorporating spatial richness into Lotka-Volterra models, which would otherwise resolve space only implicitly [@Wilson2006]. Models that use entropy maximization to estimate the "fast" flow dynamics and consumer-resource equations such as to represent the "slow" settlement dynamics are known as Boltzmann-Lotka-Volterra models [Wilson2008BoltzmannSystems]. These systems of equations are able to capture the dynamic feedbacks between settlements and the networks connecting them. 
+Powerful alternatives to the equilibrium-seeking slow dynamic in archaeological spatial interaction models are Lotka-Volterra consumer resource equations. Lotka-Volterra equations are used in ecology to model energy flows in a food web. More generally, these models can represent energy flows in any social-ecological system, such as an agricultural settlement consuming resources from its hinterland [@Anderies2011a; @Qubbaj2014]. Spatial interaction models are particularly useful for incorporating spatial richness into Lotka-Volterra models, which would otherwise resolve space only implicitly [@Wilson2006]. Models that use entropy maximization to estimate the "fast" flow dynamics and consumer-resource equations to represent the "slow" settlement dynamics are known as Boltzmann-Lotka-Volterra models [@Wilson2008]. These systems of equations are able to capture the dynamic feedbacks between settlements and the networks connecting them. 
 
-In order to keep them flexible, archaeological spatial interaction models are typically abstract and highly aggregated. The flows are assumed to be some aggregate of trade and migration reflecting the "influence" of each site on another, and the settlement state variable that evolves in time is some generalized notion of "attractiveness". While these generalizations are useful for empirical work, they elide much of the processual granularity that makes these models such a useful tool for quantitative theory building. Metabolic costs, such as the energy expended producing and transporting food over space where transportation infrastructure is sparse, provide constraints on energy flows in exchange systems [@Drennan1984]. In any particular case, the balance between these costs and the metabolic benefits of social interaction influences whether resources are moved in bulk to populations in a settlement, or whether those populations move themselves to the available resources. In order to determine how the balance of these flows influence long run settlement patterns, it is thus necessary to replace the generalized notion of flows of "influence" with more direct estimates of trade and migration flows, and a more concrete mechanistic model for how these flows influence settlement dynamics.
+In order to keep them flexible, archaeological spatial interaction models are also typically abstract and highly aggregated. The flows are assumed to be some aggregate of trade and migration reflecting the "influence" of each site on another, and the settlement state variable that evolves in time is some generalized notion of "attractiveness". While these generalizations are useful for empirical work, they elide much of the processual granularity that makes these models such a useful tool for quantitative theory building. Metabolic costs, such as the energy expended producing and transporting food over space where transportation infrastructure is sparse, provide constraints on energy flows in exchange systems [@Drennan1984]. In any particular case, the balance between these costs and the metabolic benefits of social interaction influences whether resources are moved in bulk to populations in a settlement or whether those populations move themselves to the available resources. In order to determine how the balance of these flows influence long run settlement patterns, it is thus necessary to replace the generalized notion of flows of "influence" with more direct estimates of trade and migration flows and a more concrete mechanistic model for how these flows influence settlement dynamics.
 
-Here, I present a dynamic spatial interaction model that explicitly tracks the flows of trade and migration within a settlement system. I use a variant of the Lotka-Volterra known as a "competition for resources" model, in which a population of urban settlements competes for access to food from multiple agricultural hinterlands. The populations of these settlements grow and decline according to the flow of resources into the settlements and the flow of migrants between them. Using a disaggregated, two-part spatial interaction model, I model the flows of food to people ("trade") and the flows of people to food ("migration") separately, and explore how varying the relative costs of each type of movement influences the resulting population distribution at equilibrium. I find that the constraints on moving food to people are the primary determinants of long-run settlement patterns, influencing the extractive reach of settlements and their ultimate population size. Migration costs play a secondary role, serving to enhance or diminish exhisting settlement hierarchies depending on the specific objectives of the migrants. These findings not only lay the groundwork for more quantitative theory building in the domain of spatial interaction in premodern societies, but also provide important caveats for interpreting statistical analyses of archaeological networks.
+Here, I present a dynamic spatial interaction model that explicitly tracks the flows of trade and migration within a settlement system. I use a variant of the Lotka-Volterra equations known as a "competition for resources" model, in which a population of urban settlements competes for access to food from multiple agricultural hinterlands. The populations of these settlements grow and decline according to the flow of resources into the settlements and the flow of migrants between them. Using a disaggregated, two-part spatial interaction model, I model the flows of food to people ("trade") and the flows of people to food ("migration") separately and explore how varying the relative costs of each type of movement influences the resulting population distribution at equilibrium. I show that the constraints on moving food to people are the primary determinants of long-run settlement patterns, influencing the extractive reach of settlements and their ultimate population carrying capacity. Migration costs play a secondary role, serving to enhance or diminish exhisting settlement hierarchies depending on the specific objectives of the migrants. These findings not only lay the groundwork for more quantitative theory of spatial interaction in premodern societies, but also provide important caveats for interpreting statistical analyses of archaeological networks.
 
 # Methods
 
-## Population growth and decay -- the "slow" dynamics
+## Population growth and decay: The "slow" dynamics
 
 I explore a simple model of human settlements and their agricultural hinterlands. The basic unit is a settlement, representing any urban or semi-urban population in an agrarian society that consumes food from its hinterland to support a population of non-farmers. The population engaging directly in food production is left external to the model, and it assumed that a fixed volume of surplus food resources are produced in the hinterland each year. Instead the model tracks the population of merchants, craftspeople, and elites who rely on this agricultural surplus [@Turchin2003]. The core dynamic of the urban population is represented as
 
-$$
-\dot{N} = rN,
-$$
-where $\dot{N}$ is the time rate of change of population $N$ and $r$ is the realized growth rate. The growth rate depends on the amount of resources consumed by $N$ as
+\begin{equation} 
+  \dot{N} = rN,
+\end{equation}
 
-$$
-r =
+where $\dot{N}$ is the time rate of change of population $N$ and $r$ is the realized growth rate. The realized growth rate depends on the amount of resources consumed by $N$ as
+
+\begin{equation} 
+  r =
   \begin{cases} 
-      \epsilon \left(X -  N \right) & \text{if} \space \space\epsilon \left(X - N\right) < r_{\mathit{max}} \\
+      \epsilon \left(X -  N \right) & \text{if } \epsilon \left(X - N\right) < r_{\mathit{max}} \\
       r_{\mathit{max}} & \text{otherwise},\\
    \end{cases}
-$$
-where $X$ is the amount of available resource surplus, $\epsilon$ is a parameter that controls the rate at which the surplus increases or decreases the population, and $r_{\mathit{max}}$ is the maximum growth rate. This equation states that the population grows or shrinks in proportion to its consumption of resources, but it cannot grow faster than a biological maximum rate. For simplicity, assume that $X$ is scaled to units of $N$ so that one unit of resource is sufficient to maintain one unit of population. The resulting process is a hybrid of exponential and logistic growth, with the population growing quickly when consumption is far above population, and more gradually when consumption is close to the current population (Figure \@ref(fig:growth-model)). $X$ acts as a carrying capacity, but unlike with the population's approach to this limit can be much less gradual than in logistic growth, but not as rapid as exponential growth. The population saturates and growth declines to nothing over a period of two to three generations.
+\end{equation}
+where $X$ is the amount of available resource surplus, $\epsilon$ is a parameter that controls the rate at which the surplus increases or decreases the population, and $r_{\mathit{max}}$ is the maximum growth rate. This equation states that the population grows or shrinks in proportion to its consumption of resources, but it cannot grow faster than a biological maximum rate. For simplicity, assume that $X$ is scaled to units of $N$ so that one unit of resource is sufficient to maintain one unit of population. The resulting process is a hybrid of exponential and logistic growth, with the population growing quickly when consumption is far above population and more gradually when consumption is close to the current needs of the population (i.e. "carrying capacity") (Figure \@ref(fig:growth-model)).
 
 ```{r}
 grow <- function(net, epsilon = .0001, rmax = .02){
@@ -86,8 +89,7 @@ grow <- function(net, epsilon = .0001, rmax = .02){
 ```
 
 
-```{r growth-model, fig.cap='Simulations from the growth model, compared with exponential and logistic growth, for two levels of $X$. When $N$ is near $X$, it resembles logistic growth. When $N$ is small relative to $X$, the population grows exponentially.'}
-
+```{r growth-model, fig.cap='Simulations from the growth model, compared to exponential and logistic growth for two levels of resource surplus $X$ over the same time span. $X$ acts as a carrying capacity. When $X$ is low, the potential for growth is low and the population approaches carrying capacity gradually similar to logistic growth. When $X$ is far above $N$ the population exponentially, with growth rates only declining shortly before carrying capacity is reached.'}
 x_text <- tibble(x = c(350, 400), 
        y = c(100,350), 
        X = c(250, 500),
@@ -111,7 +113,7 @@ tibble(X = c(250, 500)) %>%
   strip.text.x = element_blank())
 ```
 
-Rather than a single settlement-hinterland system, the model represents a network of hundreds of interacting settlements and hinterlands (Figure \@ref(fig:spatial-domain)). Each settlement is positioned at the center of a hexagonal hinterland of radius 5km (a one-two hour walk). Settlements extract the agricultural surplus from their local hinterland as well as those of nearby settlements. Settlements compete with one another for the fixed amount of resources produced in the hinterlands, a dynamic analogous to the "competition for resources" models common in ecology. For simplicity the harvest of resources from hinterlands is referred to as "trade", although it generally reflects any movement of food from one location to a population center in another, such as non-market forms of exchange such as sharing, exchange, or tribute. Not only do settlements interact indirectly with one another by harvesting the same hinterland, but also directly by exchanging population through migration Each model year, a fixed proportion of a settlement's population leaves each city. These migrants select their destination based on the size and distance of potential migration destinations and the relative per capita resource extraction rate of each settlement.
+Rather than a single settlement-hinterland system, the model represents a network of hundreds of interacting settlements and hinterlands (Figure \@ref(fig:spatial-domain)). Each settlement is positioned at the center of a hexagonal hinterland of radius 5km (a one to two hour walk). Settlements extract the agricultural surplus from their local hinterland as well as those of nearby settlements. Settlements compete with one another for the fixed amount of resources produced in the hinterlands, a dynamic analogous to the "competition for resources" models common in ecology. For simplicity, the harvest of resources from hinterlands is referred to as "trade", although it generally reflects any movement of food from one location to a population center in another, including non-market forms of exchange such as sharing, exchange, or tribute. Not only do settlements interact indirectly with one another by harvesting the same hinterland, but also directly by exchanging population through migration. Each model year, a fixed proportion of a settlement's population leaves each city. These migrants select their destination based on the size and distance of potential migration destinations and the relative per capita resource extraction rate of each settlement.
 
 ```{r constants}
 radius <- 5 # radius for each hinterland tile
@@ -178,23 +180,26 @@ ggraph(paths, x = x, y = y) +
 
 The simple mathematical model presented above can thus be extended into a social-ecological network of multiple interconnected consumer-resource systems. First, disaggregate $X$ and $N$ into $X_i$ and $N_j$, representing the resource surplus at location $i$ and the population at location $j$. Then, introduce two flow matrices $\mathbf{T}$ and $\mathbf{M}$ that represent trade and migration flows, respectively, such that the volume of resources produced in hinterland $X_i$ that are consumed by the population in settlement $N_j$ is $T_{ij}$, and the number of migrants moving from settlement $N_i$ to $N_j$ is $M_{ij}$. Assuming a per capita out migration rate of of $\nu$, the expanded version of Eq. 1 and 2 is thus:
 
-$$
-\dot{N_j} = rN_j - \nu N_j + \sum_i M_{ij}  ,
-$$
-$$
+\begin{equation}
+\dot{N_j} = rN_j - \nu N_j + \sum_i M_{ij},
+(\#eq:growth)
+\end{equation}
+
+\begin{equation}
 r =
   \begin{cases} 
-      \epsilon \left(\sum_i T_{ij} -  N_j \right) & \text{if} \space \space\epsilon \left(\sum_i T_{ij} -  N_j\right) < r_{\mathit{max}} \\
+      \epsilon \left(\sum_i T_{ij} -  N_j \right) & \text{if }\epsilon \left(\sum_i T_{ij} -  N_j\right) < r_{\mathit{max}} \\
       r_{\mathit{max}} & \text{otherwise}.\\
    \end{cases}
-$$
-Together, these equations state that the population of each settlement grows according to the total inflow of resources from each hinterland and the total inflow of migrants from each settlement. Next, we show how these resource and migrant flows change over time in response to these population dynamics.
+\end{equation}
 
-## Trade, migration, and spatial interaction -- the "fast" dynamics.
+Together, these equations state that the population of each settlement grows according to the total inflow of resources from each hinterland and the total inflow of migrants from each settlement. Next, I show how the resource and migrant flows represented in $\mathbf{T}$ and $\mathbf{M}$ arise as a result of these population dynamics.
 
-The model tracks two kinds of spatial flows -- movement of surplus resources from hinterlands into settlements and movement of people between settlements -- using separate spatial interaction models. Both cases use similar "production-constrained" spatial interaction models. The general approach, first used in archaeology by @Rhilandwilson, takes a fixed volume of flow "produced" at each location and allocates it among all potential destinations in proportion to the relative costs and benefits of interacting with each. Benefits are assessed as a power function of one or more settlement-level variables (such as size) that attract flows, and costs are assessed as a negative exponential function of distance (Figure \@ref(fig:functions)). Two parameters, $\alpha$ and $\beta$, control the strength of these influences. When $\alpha > 1$ the benefits of interaction exhibit increasing returns to scale. $\beta$ is in units of distance, and can be interpreted as the distance at which the strength of interaction decays to about two-thirds of its original value. 
+## Trade, migration, and spatial interaction: The "fast" dynamics.
 
-```{r functions, fig.cap='test'}
+The model tracks two kinds of spatial flows using separate spatial interaction models: movement of surplus resources from hinterlands into settlements and movement of people between settlements. Both cases use similar "production-constrained" spatial interaction models. The general approach, first used in archaeology by @Rihll1991, takes a fixed volume of flow "produced" at each location and allocates it among all potential destinations in proportion to the relative costs and benefits of interacting with each. Benefits are assessed as a power function of one or more settlement-level variables (such as size) that attract flows, and costs are assessed as a negative exponential function of distance (Figure \@ref(fig:functions)). Two parameters, $\alpha$ and $\beta$, control the strength of these influences. When $\alpha > 1$ the benefits of interaction exhibit increasing returns to scale. $\beta$ is in units of distance, and can be interpreted as the distance at which the strength of interaction decays to about two-thirds of its original value. 
+
+```{r functions, fig.cap='Functional forms for the spatial interaction models. A) Settlement-level variables influence the attractiveness of each settlement via a power function, with the parameter $\\alpha$ governing the importance of that variable. B) The costs of moving over space take the form of a negative exponential function, with the paramter $\\beta$ determining the steepness of the falloff of interaction with distance (higher values of $\\beta$ allow interaction to occur at farther distances).'}
 p1 <- expand_grid(population = 0:10000,
        alpha =  c(1, 1.05, 1.1, 1.15)) %>%
   mutate(attractiveness = population ^ alpha) %>%
@@ -222,10 +227,11 @@ p1 / p2 + plot_annotation(tag_levels = 'A')
 
 The spatial interaction model for trade is a simple "gravity" model, in which settlement population $N$ is the only variable determining a settlement's attractiveness. Thus the flow of resources from hinterland $i$ to settlement $j$, is
 
-$$
+\begin{equation}
     T_{ij} =  X_i  \frac{N_j^{\alpha_1} \exp\left(-c_{ij} / \beta_1 \right)}{ \sum_k N_k ^ {\alpha_1} \exp \left( -c_{ik} / \beta_1 \right)},
-$$
-where $X_i$ is the amount of surplus resource produced in hinterland -- the "production" term that is "constrained" in the model, and $c_{ij}$ is the cost of moving from $i$ to $j$ (distance in kilometers). The terms in the fraction simply assess the relative costs and benefits, with the numerator representing the utility of moving food to settlement $i$ and the denominator the sum of the utilities for all potential destination locations, together ensuring that the total outflows equal the total resources in $X_i$.
+    (\#eq:trade)
+\end{equation}
+where $X_i$ is the amount of surplus resource produced in hinterland -- the "production" term that is "constrained" in the model -- and $c_{ij}$ is the cost of moving from $i$ to $j$ (distance in kilometers). The terms in the fraction simply assess the relative costs and benefits, with the numerator representing the utility of moving food to settlement $i$ and the denominator the sum of the utilities for all potential destination locations, together ensuring that the total outflows equal the total resources in $X_i$.
 
 ```{r}
 trade <- function(net, alpha, beta, phi = radius / 2){
@@ -240,9 +246,10 @@ trade <- function(net, alpha, beta, phi = radius / 2){
 
  The migration flows depend in part on the trade flows, and are modeled in a similar fashion. The number of migrants moving from settlement $i$ to $j$ is 
 
-$$
+\begin{equation}
   M_{ij} =  \nu N_i \frac{N_j^{\alpha_1} W_j^{\alpha_2} \exp\left(-c_{ij} / \beta_2 \right)}{ \sum_k N_k^{\alpha_1}  W_k^{\alpha_2} \exp \left( -c_{ik} / \beta_2 \right)},
-$$
+  (\#eq:migration)
+\end{equation}
 where $\nu N_i$ is the number of migrants originating in $i$ and $W_j = \sum_iT_{ij}/N_j$ is the per-capita welfare of $j$, defined as the ratio of trade inflows to population. Unlike in the trade equation above, the attractiveness of a given settlement as a migration target depends on both its population size and its welfare. Migrants will thus seek out destinations with lots of well-fed people, and the relative values of $\alpha_1$ and $\alpha_2$ determine the relative importance of each factor.
 
 
@@ -257,7 +264,7 @@ migrate <- function(net, alpha1, alpha2, beta, nu = .05){
 }
 ```
 
-In summary, the flow of resources from each hinterland to each settlement is determined by Eq XXXX, which depends on the underlying distribution of resources and settlement populations. Then, the flow of migrants between settlements is determined by Eq XXX, based on the settlement populations and the flow of resources. Finally, the populations of the settlements grow both by consuming trade resources and by accepting new migrants, and the new population distribution will feed back to influence future trade and migrant flows. The entire system is complicated web of nonlinear, as the growth and decline of settlements can potentially depend on all other settlements. The complexity of this system increases geometrically as the number of settlements increases, precluding exact analytic solutions. We must instead leverage computational simulations to capture these complex interactions numerically.
+In summary, the flow of resources from each hinterland to each settlement is determined by Equation \@ref(eq:trade), which depends on the underlying distribution of resources and settlement populations. Then, the flow of migrants between settlements is determined by Equation \@ref(eq:migration), based on the settlement populations and the flow of resources. Finally, the populations of the settlements grow both by consuming trade resources and by accepting new migrants according to Equation \@ref(eq:growth), and theis new population distribution will feed back to influence future trade and migrant flows. The entire system is complicated web of nonlinear interaction, as the growth and decline of settlements can potentially depend on all other settlements. The complexity of this system increases geometrically as the number of settlements increases, precluding exact analytic solutions. We must instead leverage numerical simulations to capture these complex interactions computationally.
 
 ```{r}
 run_sim <- function(net, alpha1 = 1.15, alpha2 = 1, beta1 = 5, beta2 = 10, nu = .05){
@@ -275,7 +282,6 @@ run_sim <- function(net, alpha1 = 1.15, alpha2 = 1, beta1 = 5, beta2 = 10, nu = 
 }
 ```
 
-
 ```{r, eval=FALSE}
 plan(multisession)
 
@@ -285,7 +291,7 @@ param_sweep <- expand_grid(beta1 = c(5, 10, 15, 20),
                           alpha2 = c(0, 1, 1.05, 1.1, 1.15),
                           nu = c(.05, .5, 1)) %>%
   filter(beta1 <= beta2) %>%
-  mutate(sim = future_pmap(list(beta1, beta2, alpha1, alpha2, nu, m_max), function(a,b,c,d,e,f) reduce(1:2000, ~run_sim(., beta1 = a, beta2 = b, alpha1 = c, alpha2 = d, nu = e, m_max = f), .init = settlements), .progress = TRUE))
+  mutate(sim = future_pmap(list(beta1, beta2, alpha1, alpha2, nu), function(a,b,c,d,e) reduce(1:2000, ~run_sim(., beta1 = a, beta2 = b, alpha1 = c, alpha2 = d, nu = e), .init = settlements), .progress = TRUE))
 
 saveRDS(param_sweep, 'param_sweep')
 ```
@@ -332,19 +338,19 @@ saveRDS(edge_dat, 'edge_dat')
 
 # Analysis
 
-The disaggregated spatial interaction model was run from uniform initial conditions, with $X = 200$ and $N = 25$, for a period of 2000 years or until the system reached an equilibrium. This analysis focuses on the behavior of system under different combinations of the parameters that control the costs and benefits of interaction $\alpha_1, \alpha_2, \beta_1, \beta_2$. $\alpha_1$ determines how the population size of a settlement influences its attractiveness as a target for trade and migration, and $\alpha_2$ determines how this attractiveness depends on per capita welfare. $\beta_1$ and $\beta_2$ both determine the impact of distance on the intensity of flows, with the former representing the ease of moving resources to population centers and the latter the ease of moving people among population centers. Settlement patterns under different parameterizations were assessed via graphical comparison and statistical analysis of aggregate quantities including the total population, count of settlements, and an index of population dispersion and concentration. The following analysis focuses on the area of the parameter space where $\alpha_{1,2} >= 1$ and $\beta_1 \leq \beta_2$, reflecting assumptions that there are positive returns to scale in attractiveness, and moving bulk food supplies over the landscape should be more difficult than moving people. 
+The disaggregated spatial interaction model was run from uniform initial conditions, with $X = 200$ and $N = 25$, for a period of 2000 years or until the system reached an equilibrium. This analysis focuses on the behavior of system under different combinations of the parameters that control the costs and benefits of interaction $\alpha_1, \alpha_2, \beta_1, \beta_2$. The parameter $\alpha_1$ determines how the population size of a settlement influences its attractiveness as a target for trade and migration, and $\alpha_2$ determines how this attractiveness depends on per capita welfare. $\beta_1$ and $\beta_2$ both determine the impact of distance on the intensity of flows, with the former representing the ease of moving resources to population centers and the latter the ease of moving people among population centers. Settlement patterns under different parameterizations were assessed via graphical comparison and statistical analysis of aggregate quantities including the total population, count of settlements, and an index of population dispersion and concentration. The following analysis focuses on the area of the parameter space where $\alpha_{1,2} \geq 1$ and $\beta_1 \leq \beta_2$, reflecting assumptions that there are positive returns to scale in attractiveness, and moving bulk food supplies over the landscape is more difficult than moving people. 
 
-Parameter                  Default                Interpretation
+Parameter                  Value                  Interpretation
 ------------------     -----------------------    ---------- 
 $\epsilon$             0.0001                     Consumption adjustment rate   
 $r_{\mathit{max}}$     0.02                       Maximum growth rate     
 $\nu$                  0.05                       Migration rate
-$\alpha_1$             [1.0, 1.05, 1.1, 1.15]
-$\alpha_2$             [0, 1.0, 1.05, 1.1, 1.15]
-$\beta_1$              [5, 10, 15, 20]
-$\beta_2$              [5, 10, 15, 20]
+$\alpha_1$             [1.0, 1.05, 1.1, 1.15]     Returns to population size
+$\alpha_2$             [0, 1.0, 1.05, 1.1, 1.15]  Returns to per capita welfare
+$\beta_1$              [5, 10, 15, 20]            Distance deterrence of trade 
+$\beta_2$              [5, 10, 15, 20]            Distance deterrence of migration
 
-Table:  Parameters.
+Table:  Parameters, their default values, and ranges explored.
 
 ```{r}
 nd_graphs <- readRDS('nd_graphs')
@@ -353,26 +359,27 @@ node_dat <- readRDS('node_dat')
 edge_dat <- readRDS('edge_dat')
 ```
 
-## The movement of food to people defines settlement territory size
+## The movement of food to people defines settlement territory size, migration costs mediate the distribution of population
 
-How does the cost of moving food and people over distances, as encoded in the $\beta$ parameters, influence settlement patterns at equilibrium? The $\beta$ parameters are the primary way space is introduced into the model. Critically, the costs -- be they in time, money, or energy -- of moving food and other resources from hinterlands to settlements will be different from the costs of moving people between settlements. The balance of these cost factors can introduce complexity into the spatial patterns that result from these interactions. 
+How does the cost of moving food and people over distances, as encoded in the $\beta$ parameters, influence settlement patterns at equilibrium? The $\beta$ parameters are the primary way space is introduced into the model. Critically, the costs of moving food and other resources from hinterlands to settlements will be different from the costs of moving people between settlements. The balance of these cost factors can introduce complexity into the spatial patterns that result from these interactions. 
 
-For cases where migration is based only on population size, not welfare ($\alpha_1 = 1.15, \alpha_2 = 0$), increasing $\beta_1$ to allow food to be moved longer distances to reach settlements decreases the number of inhabited settlements and increases their size at equilibrium (Figure \@ref(fig:beta1)a). The relationship to settlement count is not linear, rather there is a jump at $5 < \beta_1 < 10$, reflecting the distance of the nearest cell neighbor given the cell resolution. As the number of settlements at equilibrium decreases, these major settlements also move closer to the center of the domain, corresponding to the locations with the maximum access to resources given the travel costs. This competition for resource access can be visualized by connecting each hinterland to the settlement to which the majority of its resources travel  (Figure \@ref(fig:beta1)b). 
+For cases where migration is based only on population size, not welfare ($\alpha_1 = 1.15, \alpha_2 = 0$), increasing $\beta_1$ to allow food to be moved longer distances to reach settlements decreases the number of inhabited settlements and increases their size at equilibrium (Figure \@ref(fig:beta1)a). As the number of settlements at equilibrium decreases, these major settlements also move closer to the center of the domain, corresponding to the locations with the maximum access to resources given the travel costs. This competition for resource access can be visualized by connecting each hinterland to the settlement to which the majority of its resources travel  (Figure \@ref(fig:beta1)b). 
 
-A settlement's ability to gain an initial surplus because of its position is key to its long term survival. The absolute productivity of the land is less important than access to resources systems without significant competition from other settlements. Changing $\beta_1$ to facilitate easier resource transport acts to increase the competition between settlements for productive land, making it easier for larger, more distant settlements to out-compete smaller nearby settlements for access to a given resource system. The initial benefits of position lead to increased population growth, which quickly feeds back to allow the settlement to compete for resources further afield. 
+If the costs of moving resources to settlements, as encoded in $\beta_1$, strongly determine the size and spacing of major settlements, what role to the migration costs embedded in $\beta_2$ play? Holding $\beta_1$ constant at a low value (5km) and varying $\beta_2$ allows migrants to move further across the landscape than food resources. The result is a pattern of concentric rings at low values of $\beta_2$ (Figure \@ref(fig:beta2)a). When it is difficult to move food over space, migration acts in lieu of food transport by increasing the size of the terminal centers (allowing population to move to populated zones), but this effect and the resulting size of the population is not nearly as strong as that induced by varying $\beta_1$. 
 
-```{r beta1, fig.cap = "Food to people, vs people to food"}
+A settlement's ability to gain an initial surplus because of its position is key to its long term survival. The absolute productivity of the land is less important than access to resources systems without significant competition from other settlements. Changing $\beta_1$ to facilitate easier resource transport acts to increase the competition between settlements for productive land, making it easier for larger, more distant settlements to out-compete smaller nearby settlements for access to a given resource system. The initial benefits of position lead to increased population growth, which quickly feeds back to allow the settlement to compete for resources and population from sources further afield. 
+
+```{r beta1, fig.cap = "The role of distance deterrence of trade in settlement size and spacing. A) Equilbrium settlement patterns and populations for different levels of $\\beta_1$, with $\\beta_2 = 20, \\alpha_1 = 1.15, \\alpha_2 = 0$. B) Same as A, but for each hinterland an edge is drawn connecting it to the settlement to which the majority of its resources flow. Trade flow is measured in units of food to support 1 person per year."}
 a <- node_dat %>%
- # filter(alpha1 == 1.15, alpha2 == 1, nu == 0.05, beta2 == 20) %>%
-    filter(alpha1 == 1.15, alpha2 == 0, m_max == 0.05, beta2 == 20) %>%
+  filter(alpha1 == 1.15, alpha2 == 0, m_max == 0.05, beta2 == 20) %>%
   group_by(beta1, beta2)%>%
   arrange(population) %>%
   filter(population >= 1) %>%
   ggplot() +
   geom_sf(data = hinterlands, fill = NA, color = 'grey65') +
   geom_point(aes(x, y, size = population, color = population))+
-  scale_size_area() +
-  scale_color_viridis_c(guide = 'legend') +
+  scale_size_area(name = 'Population') +
+  scale_color_viridis_c(guide = 'legend', name = 'Population') +
   coord_sf(datum = NA) +
   theme_void() +
   facet_wrap(~beta1, nrow = 1)
@@ -387,7 +394,7 @@ b <- nd_graphs %>%
   ggraph(x = x, y = y) +
     geom_sf(data = hinterlands, fill = NA, color = 'grey65') +
   geom_edge_link(aes(color = trade_flow), width = 1) +
-  scale_edge_color_viridis() +
+  scale_edge_color_viridis(name = 'Trade flow') +
   facet_edges(~beta1, nrow = 1) +
   coord_sf(datum = NA) +
   theme_void()
@@ -395,15 +402,8 @@ b <- nd_graphs %>%
 a / b + plot_annotation(tag_levels = 'A')
 ```
 
-## Migration costs mediate the distribution of population
-
-If the costs of moving resources to settlements, as encoded in $\beta_1$, strongly determine the size and spacing of major settlements, what role to the migration costs embedded in $\beta_2$ play? Holding $\beta_1$ constant at a low value (5km) and varying $\beta_2$ allows migrants to move further across the landscape than food resources. 
-
-The result is a pattern of concentric rings at low values of $\beta_2$ (Figure \@ref(fig:beta2)a). When it is difficult to move food over space, migration acts in lieu of food transport by increasing the size of the terminal centers (allowing population to move to populated zones), but this effect and the resulting size of the population is not nearly as strong as that induced by varying $\beta_1$. There is a break in this pattern at $\beta_2 = 15$, where the center becomes filled with multiple settlements of similar size in a hexagon pattern. The number of settlements in this central zone increases with increasing migration. These settlements only extract food from their local hinterland. This core settlement zone is a result of the size and shape of the spatial domain, as at long distance interaction the size and shape of the domain more strongly constrains the possible configurations. These inner zones are only present when $\beta_1$ is low or when $\alpha_1 = 1$, this zone represents situations where no settlement can get an initial advantage from its location or increasing returns to scale and growth ceases. Settlements at the edge get initial advantages because they have fewer nearby cities competing with them for resources. At low $\beta_2$, this doesn't matter as much, but at high $\beta_2$ it sets off a feedback loop as population migrates to the sites with initial advantages. This central zone disappears if $\beta1$ or $\alpha_1$ is increased, allowing for some sites to gain initial advantages that feed forward in time (Figure \@ref(fig:beta2)b). In these cases, $beta_2$ no longer changes the broad settlement pattern but rather serves to concentrate more people in fewer, closer core settlements.
-
-```{r beta2, fig.cap='test'}
+```{r beta2, fig.cap='Settlement population (A) and trade flows (B) at equilbrium for different levels of $\\beta_2$$, the distance deterrence for migration, with $\\beta_1 = 5, \\alpha_1 = 1.15, \\alpha_2 = 0$.'}
 a <- node_dat %>%
-  #filter(alpha1 == 1.15, alpha2 == 1, nu == 0.05, beta1 == 5) %>%
    filter(alpha2 == 0, m_max == 0.05, beta1 == 5, alpha1 == 1.15) %>%
   group_by(alpha1, beta2)%>%
   #filter(population >1) %>%
@@ -411,8 +411,8 @@ a <- node_dat %>%
    ggplot(aes(x, y)) +
   #geom_sf(data = hinterlands, fill = NA, color = 'grey65') +
   geom_point(aes(size = population, color = population))+
-  scale_size_area() +
-  scale_color_viridis_c(guide = 'legend') +
+  scale_size_area(name = 'Population') +
+  scale_color_viridis_c(guide = 'legend', name = 'Population') +
   #coord_sf(datum = NA) +
   coord_equal() +
   theme_void() +
@@ -428,7 +428,7 @@ b <- nd_graphs %>%
   ggraph(x = x, y = y) +
     geom_sf(data = hinterlands, fill = NA, color = 'grey65') +
   geom_edge_link(aes(color = trade_flow), width = 1.1) +
-  scale_edge_color_viridis() +
+  scale_edge_color_viridis(name = 'Trade flow') +
   facet_edges(~beta2, nrow = 1) +
   coord_sf(datum = NA) +
   theme_void()
@@ -437,271 +437,59 @@ a / b + plot_annotation(tag_levels = 'A')
 ```
 
 
-## Population-based migration increases settlement hierarchy, welfare-based migration reduces it
+## Population-based migration increases settlement hierarchy; welfare-based migration reduces it
 
-The parameters $\alpha_1$ and $\alpha_2$ control the relevance of site population and per capita welfare in attracting flows of food and migrants. 
+The parameters $\alpha_1$ and $\alpha_2$ control the relevance of site population and per capita welfare in attracting flows of food and migrants. Introducing superlinear scaling parameters to the population size and welfare by increasing $\alpha_1$ and $\alpha_2$ doesn't change the basic interaction between the $\beta$ parameters, but does impact the size hierarchy. Alternately setting $\alpha_2 = 0$ or $\alpha_2 \geq 1$ allows the model to represent scenarios in which only population size determines the attractiveness of a settlement to migrants, or situations in which the balance of population and per capita welfare influence migrant decision-making. 
 
-Constraining beta1 to 5 and beta2 to 10, then exploring alphas. All else being equal, we'd assume $\alpha_1 = \alpha_2$ since they both relate the the scaling with population size, and the differences in the importance of population size between travel and transport attractiveness would be introduced by the prefactor (which get's cancelled here given the normalization). Nevertheless we explore different combinations of alphas.
+In the first scenario with only population-based migration, there are nonlinear interactions between the migrant attractivness and distance deterrence parameters (Figure \@ref(fig:beta2alpha1)). Generally, increasing $\alpha_1$ increases the concentration of populations in fewer centers. As before, the settlements near the edge grow fastest because there is less competition for access to resources. There is a break in this pattern at $\beta_2 \geq 15$ and $\alpha_1 = 1$, where the center becomes filled with multiple settlements of similar size in a hexagon pattern. The number of settlements in this central zone increases with increasing migration. These settlements only extract food from their local hinterland. This core settlement zone is a result of the size and shape of the spatial domain, as at long distance interaction the size and shape of the domain more strongly constrains the possible configurations. These inner zones are only present when $\beta_1$ is low or when $\alpha_1 = 1$, as this zone represents situations where no settlement can get an initial advantage from its location or increasing returns to scale and growth ceases. Settlements at the edge get initial advantages because they have fewer nearby cities competing with them for resources. At low $\beta_2$, this dynamic matters little, but at high $\beta_2$ it sets off a feedback loop as population migrates to the sites with initial advantages. This central zone disappears if $\beta1$ or $\alpha_1$ is increased, allowing for some sites to gain initial advantages that feed forward in time. In these cases, $\beta_2$ no longer changes the broad settlement pattern but rather serves to concentrate more people in fewer, closer core settlements.
 
-Introducing superlinear scaling parameters to the population size and welfare by increasing $\alpha_1$ and $\alpha_2$ doesn't change the basic interaction between the $\beta$ parameters, but does impact the size hierarchy. Generally, increasing $\alpha_1$ increases the concentration of populations in fewer centers. As before, the settlements near the edge grow fastest because there is less competition for access to resources.  Incorporating $\alpha_2$, so that people avoid crowded locations, considerably increases the complexity of the system. If migrants are attracted to zones with high per capita welfare, migration acts to smooth over variations in settlement size due to differential access to resources. The uniform central zone of low population centers discussed earlier arises at even shorter distance migration. This reflects situations where movement is generally easy, but there are few advantages to living in more populated sites so migration acts as a counterbalance to the competition for resources.
-
-```{r}
+```{r beta2alpha1, fig.cap='Interaction between the distance deterrence for migrants ($\\beta_2$, columns) and the returns to attractiveness for population size ($\\alpha_1$, rows), when the moving food to settlements is difficult and migrants make decisions based only on settlement population size ($\\beta_1 = 5$ and $\\alpha_2 = 0$).'}
 node_dat %>%
  # filter(beta1 == 5, beta2 == 15, nu == 0.05) %>%
     filter(beta1 == 5, alpha2 == 0, m_max == 0.05) %>%
-  group_by(alpha1, alpha2)%>%
+  group_by(alpha1, beta2)%>%
   arrange(population) %>%
   ggplot(aes(x, y)) +
   geom_point(aes(size = population, color = population))+
-  scale_size_area() +
-  scale_color_viridis_c(guide = 'legend') +
+  scale_size_area(name = 'Population') +
+  scale_color_viridis_c(guide = 'legend', name = 'Population') +
   coord_equal() +
   theme_void() +
   facet_grid(rows = vars(alpha1), cols = vars(beta2))
 ```
 
+Allowing $\alpha_2 \geq 1$, so that people avoid settlements with low welfare, considerably increases the complexity of the system when trade costs are high (Figure \@ref(fig:beta2alpha2)). If migrants are attracted to zones with high per capita welfare, migration acts to smooth over variations in settlement size due to differential access to resources. The uniform central zone of low population centers discussed earlier arises at even shorter distance migration. This reflects situations where movement is generally easy, but there are few advantages to living in more populated sites so migration acts as a counterbalance to the competition for resources.
 
-
-We also explore the equilibria when $\alpha_2 = 0$, describing a system in which only population size and not food availability influences migration.
-
-```{r}
+```{r beta2alpha2, fig.cap='Interaction between the distance deterrence for migrants ($\\beta_2$, columns) and the returns to attractiveness for per capita welfare ($\\alpha_2$, rows), when the moving food to settlements is difficult and migrants make decisions based on both settlement population size and per capita welfare ($\\beta_1 = 5$ and $\\alpha_1 = 1.15$).'}
 node_dat %>%
-  #filter(beta1 == 5, beta2 == 10, nu == 0.05) %>%
-  filter(beta1 == 5, beta2 == 10, m_max == 0.05) %>%
-  group_by(alpha1, alpha2)%>%
+    filter(beta1 == 5, alpha1 == 1.15, m_max == 0.05) %>%
+  group_by(beta2, alpha2)%>%
   arrange(population) %>%
   ggplot(aes(x, y)) +
   geom_point(aes(size = population, color = population))+
-  scale_size_area() +
-  scale_color_viridis_c(guide = 'legend') +
+  scale_size_area(name = 'Population') +
+  scale_color_viridis_c(guide = 'legend', name = 'Population') +
   coord_equal() +
   theme_void() +
-  facet_grid(rows = vars(alpha2), cols = vars(alpha1))
-
-node_dat %>%
- # filter(beta1 == 5, beta2 == 15, nu == 0.05) %>%
-    filter(beta1 == 5, beta2 == 15, m_max == 0.05) %>%
-  group_by(alpha1, alpha2)%>%
-  arrange(population) %>%
-  ggplot(aes(x, y)) +
-  geom_point(aes(size = population, color = population))+
-  scale_size_area() +
-  scale_color_viridis_c(guide = 'legend') +
-  coord_equal() +
-  theme_void() +
-  facet_grid(rows = vars(alpha2), cols = vars(alpha1))
-
-
-
+  facet_grid(rows = vars(alpha2), cols = vars(beta2))
 ```
-
-```{r}
- node_dat %>%
- # filter(alpha1 == 1.15, alpha2 == 1, nu == 0.05, beta1 == 5) %>%
-    filter(beta1 == 5, beta2 == 10, m_max == 0.05) %>%
-  group_by(alpha1, alpha2) %>%
-  arrange(-population) %>%
- filter(population >= 1) %>%
-  mutate(rank = 1:n()) %>%
-  ggplot(aes(rank, population)) +
-  geom_line() +
-  geom_point() +
-  scale_x_log10() +
-  scale_y_log10() +
-  facet_grid(rows = vars(alpha2), cols = vars(alpha1), scales = 'free_y') +
-  geom_smooth() +
-  theme_classic()
-```
-
-Rank size distribution. Increasing $\beta_2$ increases the convexity of the rank size distribution. Increasing $\beta_1$ decreases it.
-at low beta2 we have double convexity, 
-
-
-Incorporating welfare-based migration ($\alpha_1 = 1.15, \alpha_2 = 1$), increases the spatial complexity when $\beta_1$ is low
-
-```{r, beta1_alpha21, fig.cap = "Food to people, vs people to food"}
-a <- node_dat %>%
- # filter(alpha1 == 1.15, alpha2 == 1, nu == 0.05, beta2 == 20) %>%
-    filter(alpha1 == 1.15, alpha2 == 1, m_max == 0.05, beta1 == 5) %>%
-  group_by(beta1, beta2)%>%
-  arrange(population) %>%
-  ggplot(aes(x, y)) +
-  geom_point(aes(size = population, color = population))+
-  scale_size_area() +
-  scale_color_viridis_c(guide = 'legend') +
-  coord_equal() +
-  theme_void() +
-  facet_wrap(~beta2, nrow = 1)
-
-b <- nd_graphs %>%
-  filter(alpha1 == 1.15, alpha2 == 1, m_max == .05, beta2 == 20)  %>%
-  mutate(nd = map(trade, as_tibble, 'edges')) %>%
-  select(beta1:m_max, nd) %>%
-  unnest(col = c(nd)) %>%
-  tbl_graph(nodes = as_tibble(paths, 'nodes'), edges = .) %E>%
-  arrange(trade_flow) %>%
-  ggraph(x = x, y = y) +
-    geom_sf(data = hinterlands, fill = NA, color = 'grey65') +
-  geom_edge_link(aes(color = trade_flow), width = 1.1) +
-  scale_edge_color_viridis() +
-  facet_edges(~beta1, nrow = 1) +
-  coord_sf(datum = NA) +
-  theme_void()
-
-a / b + plot_annotation(tag_levels = 'A')
-```
-
-
-
-
-```{r, eval = FALSE, cache=TRUE}
-sim <- settlements %>%
-  list(., ., ., .) %>%
-  tibble(net = .,
-         beta2 = c(5, 10, 15, 20)) %>%
-  mutate(net = map2(net, beta2, ~prune(.x, beta = .y, tolerance = .001))) %>%
-  mutate(sim = map2(net, beta2, function(x, y) accumulate(1:1000, ~run_sim(.x, beta2 = y), .init = x)) )
-
-sim %>%
-  select(-net) %>%
-  mutate(sim = map(sim, ~map(., as_tibble, 'nodes') %>% bind_rows(.id = 'time'))) %>%
-  unnest(cols = c(sim)) %>%
-  mutate(time = as.numeric(time), beta2 = as.factor(beta2)) %>%
-  ggplot(aes(time, population, group = id)) +
-  geom_line(alpha = .2) +
-  facet_wrap(~beta2) +
-  theme_classic()
-
-
-sim %>%
-  select(-net) %>%
-  mutate(sim = map(sim, ~map(., as_tibble, 'nodes') %>% bind_rows(.id = 'time'))) %>%
-  unnest(cols = c(sim)) %>%
-  mutate(time = as.numeric(time), beta2 = as.factor(beta2))  %>%
-  group_by(beta2) %>%
-  filter(time == max(time)) %>%
-  ggplot(aes(x, y)) +
-  geom_point(aes(size = population, color = population)) +
-  scale_color_viridis_c() +
-  scale_size_area() +
-  facet_wrap(~beta2)+
-  coord_equal()
-```
-
-## Equilibrium site counts, population, and dispersion
-
-let's analyze the patterns statistically. we calculate the total population of each simulation, and the relative Shannon entropy of the population distribution, and index of dispersion. Values of 0 indicates fully concentrated in a single point system, 1 is as dispersed as possible.
-
-Remember that high population usually means more dispersion, that means more settlements. maybe some measure of the hierarchy
-
-So with constant low migration higher population is related to low beta1, high beta2. Alpha1 increases migration at lower values but it is nonlinear (reflecting underlying power law). Alpha 2 has almost no effect. That said, these parameters only explain ca 20% of the deviance
-
-The parameters do a much better job of explaining entropy, approximately 90% of the deviance is explained. Beta1 is the strongest determinate of entropy. Low beta1 results in high entropy (high dispersion), and the relationship is nonlinear. Increasing beta2 has a small linear increase in dispersion. The nonlinear break between 5 and 10 beta1 (around the difference in cell size) is visible here. Alpha1=1 slightly increases the dispersion, but as soon as scale economies are increased by raising it the strength of the interaction decreases. Alpha2 linearly increases dispersion
-
-Finally we look at relationships to the count of sites with population > 1 at equilibrium. Here beta1 again, at low values increases the count. Beta2 increases, and below 10 it more decreases the count. So if migration is difficult, fewer site grow. Alpha1 matters a lot. When alpha1 is 0, so there are no returns to population, much more sites survive to equilibrium. At increasing levels of alpha2, this effect is less pronounced. Increasing nu decreases count, but only slightly (so slower migration production arises the fewer sites there are.)
-
-That was all for the pulse migration case. Without that, there is a threshold at beta1 = 15, beyond which it doesn't change the count of sizes that much. The other relationships are similar, although beta2 is more pronounced. Alpha2 also matters here, unlike in other cases. Increasing the returns to food supply increases the count at equilibrium.
-
-
-```{r}
-param_dat %>%
-#  filter(nu == 0.05) %>%
-    filter(m_max == 0.05) %>%
-  gam(population ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4),
-          data = .) %>% plot(pages = 1)
-
-param_dat %>%
-  #  filter(nu == 0.05) %>%   
-  filter(m_max == 0.05) %>%
-gam(entropy ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4),
-          data = .) %>% plot(pages = 1)
-
-param_dat %>%
-  #  filter(nu == 0.05) %>%  
-  filter(m_max == 0.05) %>%
-gam(count ~ s(beta1, k = 4) + s(beta2, k = 4) + s(alpha1, k = 4) + s(alpha2, k = 4),family = poisson, data = .) %>% plot(pages = 1)
-```
-
-
-
-So looking at the parameter combinations that lead to high population or high concentration ... low beta1 and high beta2 have the highest population, more sensitive to beta1, and alphas set to 0, and alpha 2 more important to be low than otherwise. This is what we saw in the graphs with the large central areas, which reflect low transport costs and low returns to scale. For the entropy case, low beta1 means higher entropy (ie more dispersion). Beta2 matters less, and again with low or no scaling. having alpha3 in the mix also increases dispersion, all as we'd expect.
-
-So most dispersed (high entropy) patterns arise when territories are small, migration is easy, and migration is influence more by food access then by population. Especially if we assume migration is a fast response to carrying capacity. So basically we have a lot of people moving around right as carrying capacity is reached.
-
-
-
-Entropy is lowest (most concentrated) when movement is easy in either domain, and people only make movement decisions based on size sizes, and migration response to food stress is gradual. This means people are attracted to high population settlements, they can move easily to them
-
-
-interestingly, there seems to be very little variability around beta1 is 15, that's when we get to 3 city attractor. beta 2 increasing slightly decreases entropy, but not as strongly as beta1. having alpha3 in the mix slightly increases the entropy, but the boxplots are still within the range of one another as we might expect
-
-So what does this all leave us with. Beta1 governs the spacing of the centers, beta2 and alphas more impact the population distribution. Alphas specifically increase the hierarchies
-
-So generally we see more settlements with decreasing beta. With increasing alpha we get a more defined hierarchy of site sizes.
-
-
-Important to note here that the interpretation of the value of beta depends on the characteristic length scale.
-
-
-"jumps" in the parameter space (clarke and wilson 1983 or 1985, regional science). basically the relationships between alpha and beta are consistent for this
-
-Explore the rank size distribution
-
-Hard to see here, but for beta = 1 we can really see the effect of migration, longer migration distance leads to some pooling in center.
-But in general, variation due to trade swamps that from migration, because trade also shapes migration but less so the other way around.
-
-
-
-
-
-We don't see ideal free distribution
-
-There's not a clear relationship between size and local productivity. what about in the region?
-
-
-The larger one's hinterland is, the higher the population. not surprising
-
-
 
 # Discussion
 
-This study sought to explore the relative influence of the cost of transporting food into settlements and the costs for migrants to move between them on settlement patterns. Analysis of a disaggregated spatial interaction model that models these influences separately revealed that trade costs were ultimately more important than migration costs for shaping overall settlement patterns. The costs of moving resources from hinterlands to settlements determines the territorial reach of resource extraction, which is the primary determinate of equilibrium site size and spatial configuration. Even small initial differences in resources can increase consumption enough to set off a positive feedback between settlement population and resource extraction. The importance of trade flows here is consistent with related modeling effors that highlighted the role of trade networks in extending local carrying capacity in simple consumer resource networks [@Qubbaj2014,Dolfing2019]. Migration has a more subtle influence in the model than trade, acting to redistribute population among settlements without majorly impacting absolute population size. Migration is most important when food transport costs are particularly high and the territorial reach of small settlements is low. These results highlight that the precise nature of spatial interaction in a settlement system has important consequences for understanding the development and maintenance of stable settlement patterns in the archaeological record.
+This study sought to explore the relative influence of the cost of transporting food into settlements and the costs for migrants to move between them on settlement patterns. Analysis of a disaggregated spatial interaction model that models these influences separately revealed that trade costs were ultimately more important than migration costs for shaping overall settlement patterns. The costs of moving resources from hinterlands to settlements determines the territorial reach of resource extraction, which is the primary determinate of equilibrium site size and spatial configuration. Even small initial differences in resources can increase consumption enough to set off a positive feedback between settlement population and resource extraction. The importance of trade flows here is consistent with related modeling effors that highlighted the role of trade networks in extending local carrying capacity in simple consumer resource networks [@Qubbaj2014; @Dolfing2019]. Migration has a more subtle influence in the model than trade, acting to redistribute population among settlements without majorly impacting absolute population size. Migration is most important when food transport costs are particularly high and the territorial reach of small settlements is low. These results highlight that the precise nature of spatial interaction in a settlement system has important consequences for understanding the development and maintenance of stable settlement patterns in the archaeological record.
 
-This study analyzed a system of settlement on a regular lattice overlaying a uniform environment, in order to isolate the effects of the spatial interaction on the system's behavior. But the resulting dynamics are nonlinear, which means that the initial and boundary conditions of the settlement system will constrain its ultimate trajectory. In any given real-world setting, the initial distribution of sites, not to mention the spatial configuration of productive land and physical impediments to travel, will influence the resulting settlement patterns. Future exploration of this model measure the effect of such environmental variability. In particular, this disaggregated modeling framework can help isolate quantitative classes of variability -- such as degrees of spatial or temporal auto-correlation -- that lead to qualitatively different settlement patterns.
+This study analyzed a system of settlement on a regular lattice overlaying a uniform environment, in order to isolate the effects of the spatial interaction on the system's behavior. But the resulting dynamics are nonlinear, which means that the initial and boundary conditions of the settlement system will constrain its ultimate trajectory. In any given real-world setting, the initial distribution of sites, not to mention the spatial configuration of productive land and physical impediments to travel, will influence the resulting settlement patterns. Future exploration of this model measure the effect of such environmental variability. In particular, this disaggregated modeling framework can help isolate quantitative classes of variability that lead to qualitatively different settlement patterns, such as degrees of spatial or temporal auto-correlation.
 
-Future work should also draw on the extensive toolkit developed in geography and economics for dynamic spatial interaction modeling. Potential methodological innovations include various ways of further disaggregating the "fast" flow dynamics or of incorporating more complex or context-specific models into the "slow" settlement dynamics. For example, how do the costs of transporting resources to settlements interact when the resources include not just food, but other raw materials for energy or craft production that may contribute to a settlement's carrying capacity or attractiveness. Similarly, the migration flows could be disaggregated to explore the interactions between those of different age, ethnic, or social classes [@Altaweel2015]. Given more precise models of the spatial flows, the dynamics of settlement growth and decline can also be elaborated. In the present version of the model, the "production" of food and migrants at each settlement is assumed to be constant or a fixed proportion of population size, respectively. One might instead model the dynamics of the food producers directly, incorporating feedbacks between producer and consumer populations [@Turchin2003], or allow migration rates to vary based on population size [@Curiel2018] or differences in the levels of per capita food consumption [@Anderies2011a]. Even if these elaborations do little to alter settlement patterns at equilibrium, they will introduce important new behaviors as theses systems approach that equilibrium -- the "transient" dynamics -- that in concert with variable initial and boundary conditions will be critical for reproducing the complexity visible in the archaeological record.
+Future work should also draw on the extensive toolkit developed in geography and economics for dynamic spatial interaction modeling. Potential methodological innovations include various ways of further disaggregating the "fast" flow dynamics or of incorporating more complex or context-specific models into the "slow" settlement dynamics [@Fry2012]. For example, how do the costs of transporting resources to settlements interact when the resources include not just food, but other raw materials for energy or craft production that may contribute to a settlement's carrying capacity or attractiveness. Similarly, the migration flows could be disaggregated to explore the interactions between those of different age, ethnic, or social classes [@Altaweel2015]. Given more precise models of the spatial flows, the dynamics of settlement growth and decline can also be elaborated. In the present version of the model, the production of food and the production of migrants at each settlement is assumed to be constant or a fixed proportion of population size, respectively. One might instead model the dynamics of the food producers directly, incorporating feedbacks between producer and consumer populations [@Turchin2003], or allow migration rates to vary based on population size [@Curiel2018] or differences in the levels of per capita food consumption [@Anderies2011a]. Even if these elaborations do little to alter settlement patterns at equilibrium, they will introduce important new behaviors as theses systems approach that equilibrium -- the "transient" dynamics -- that in concert with variable initial and boundary conditions will be critical for reproducing the complexity visible in the archaeological record.
 
-And it is precisely here, at the interface of archaeological theory and data, where spatial interaction models may contribute most. These models support both dynamical and statistical implementation -- the same model can be used as a tool for developing theory from one domain and interpreting data in another. Numerical simulation with these models can help explore the empirical archaeological record, and act as a test bed for the development of new statistical methods. For example, a statistical spatial interaction model estimates only one $\beta$ value, the coefficient of distance in a log-linear regression. How should one interpret this regression coefficient when it is likely that the pattern at hand arose from the interaction of multiple spatial processes? Disaggregated, dynamic spatial interaction models allow researchers to flexibly explore different dynamical processes interacting to form the stable patterns recorded in the field.
+And it is precisely here, at the interface of archaeological theory and data, where spatial interaction models may contribute most. These models support both dynamical and statistical implementation; the same model can be used as a tool for developing theory from one domain and interpreting data in another. Numerical simulation with these models can help explore the empirical archaeological record, and act as a test bed for the development of new statistical methods. For example, a statistical spatial interaction model estimates only one $\beta$ value, the coefficient of distance in a log-linear regression. How should one interpret this regression coefficient when it is likely that the pattern at hand arose from the interaction of multiple spatial processes? Disaggregated, dynamic spatial interaction models allow researchers to flexibly explore different dynamical processes interacting to form the stable patterns recorded in the field.
 
 This research highlights dynamics \textit{of} networks, not dynamics \textit{on} networks. The approach implicit in many conceptual and mathematical models of networks, and archaeological networks in particular, treats them as static (if nontrivial) structures on which some dynamic of interest plays out. These structures only change in time to the extent that the researcher intervenes by adding or removing nodes and edges manually. This view is understandable given the fragmentary and time-averaged nature of the archaeological record. Instead, the approach used here treats social networks as dynamical systems with continuous flows of matter, information, and energy in constant interaction with their ecological and social environments. Improved representations of social and biophysical dynamics will not only enhance understanding of the empirical settlement patterning in the archaeological record, but will also facilitate future cross-cultural and inter-regional comparisons by providing a shared set of questions and methodological tools for answering them.
 
 Settlement patterns are some of the most basic components of the archaeological record, yet only in recent decades have archaeologists developed the computational expertise and theoretical tools needed to reconstruct the social fabrics binding those settlements together. But the utility of such datasets for addressing questions of societal relevance remains limited. Archaeological settlement pattern data are rarely comprehensible to the researchers, policy advisers, and stakeholders in the developing world most likely to gain meaningful insight from the information they contain. The solution to this problem lies in the fuller integration of theory and data from the broader social sciences. Spatial interaction models can act as a bridge in this respect, allowing archaeologists to leverage decades of accumulated research into the role of space and distance on the societies of the present and the past.
 
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+\setlength{\parskip}{8pt}
 
 # References {#references .unnumbered}
-
-```{r}
-knitr::knit_exit()
-```
-
-
-```{r}
-anim <- sim4 %>%
-#   map(nystuen_dacey) %>%
-   map(as_tibble, 'nodes') %>%
-  bind_rows(.id = 'time') %>%
-  mutate(time = as.numeric(time)) %>%
-  filter(between(time, 1, 500)) %>%
- #filter(time %% 5 == 0) %>%
-ggplot() +
-  #  geom_sf(data = spatial_patterns, aes(fill = grf_100)) +
-  geom_point(aes(x, y, size = population))+#aes(color = terminal)) +
-  #coord_sf(datum = NA) +
-  coord_equal() +
-  #scale_fill_scico(palette = 'bamako')
-  theme_void() +
-  labs(title = 'Year: {closest_state}') +
-  transition_states(time)
-
-animate(anim, nframes = 999)
-```
